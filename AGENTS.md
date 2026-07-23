@@ -175,8 +175,11 @@ into a file); `--raw` streams the underlying transcript file verbatim.
 - **Lint/type**: `ruff format` + `ruff check` clean, and `pyrefly check` at
   `preset = "strict"` with **0 errors**. Every overriding backend method carries
   `@override`. Full annotations; `die()` is `NoReturn`.
-- **Color**: `util.set_color()` overrides tty auto-detection (used by `dump
-  --color`); build strings with the color helpers, which honor it at call time.
+- **Color**: `util.set_color()` overrides tty auto-detection; build strings with
+  the color helpers, which honor it at call time. Auto-on for a tty (unless
+  `NO_COLOR`); `dump --color` forces it on into a non-tty sink; the global
+  `--no-color` flag (and `NO_COLOR`) forces it off, applied in `main()` before
+  any command runs.
 
 ## Testing
 
