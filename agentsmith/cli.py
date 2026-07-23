@@ -1255,7 +1255,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_complete)
 
     sp = sub.add_parser("path", parents=[common], help="print on-disk location")
-    _mark(sp.add_argument("session", help="id / prefix / path / ."), "ids")
+    _mark(
+        sp.add_argument(
+            "session",
+            nargs="?",
+            default=".",
+            help="id / prefix / path / . (default: cwd)",
+        ),
+        "both",
+    )
     sp.set_defaults(func=cmd_path)
 
     sp = sub.add_parser("grep", parents=[common], help="regex-search full transcripts")

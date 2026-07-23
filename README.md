@@ -111,7 +111,7 @@ the full id).
 | `cw checkpoints <session>` (`cp`) | Checkpoints (copilot only). `-v` for next steps. |
 | `cw usage [session]` | Token/AIU usage for a session, or a cross-harness leaderboard. |
 | `cw recent [-n N]` | Most recent sessions across all directories. |
-| `cw path <session>` | Print the on-disk location. |
+| `cw path [session]` | Print the on-disk location (default: session for cwd). |
 | `cw stats` | Per-harness totals (sessions, resumable, dirs, span). `--usage` adds AIU. |
 | `cw rm <id/path…>` (`prune`) | **Shred** session(s) — no vestiges. Takes ids/prefixes **or a path** (all sessions under it). `-y`, `--dry-run`, `-v`, `--aggressive`. |
 | `cw purge` | Shred all **empty** sessions (no transcript, 0 turns). `-y`, `--dry-run`, `-v`, `-H`. |
