@@ -1,0 +1,3 @@
+project-includes = ["agentsmith"]
+python-interpreter = "/export/apps/python/3.12/bin/python3"
+preset = "strict"
