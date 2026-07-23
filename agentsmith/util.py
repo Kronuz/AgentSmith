@@ -61,7 +61,7 @@ def red(t: str) -> str:
 
 
 def die(msg: str, code: int = 1) -> NoReturn:
-    print(f"cw: {msg}", file=sys.stderr)
+    print(f"asmith: {msg}", file=sys.stderr)
     raise SystemExit(code)
 
 

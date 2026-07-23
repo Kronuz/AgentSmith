@@ -5,13 +5,13 @@ Guidance for AI agents (and humans) working on this project.
 ## What this is
 
 **Agentsmith** is a swiss-army knife for inspecting AI coding-agent sessions,
-exposed as the `cw` command. It reads (and can shred) the local session stores of
+exposed as the `asmith` command. It reads (and can shred) the local session stores of
 two harnesses:
 
 - **copilot** — GitHub Copilot CLI (`~/.copilot`)
 - **claude** — Claude Code (`~/.claude`)
 
-Everything is read-only except `cw rm` (session shred). There are **no
+Everything is read-only except `asmith rm` (session shred). There are **no
 AI/model-dependent commands** — an earlier `summarize`/`triage` pair was removed
 because it needed a working agent (`copilot -p`) that isn't reliably available.
 
@@ -24,13 +24,13 @@ because it needed a working agent (`copilot -p`) that isn't reliably available.
 | `agentsmith/model.py` | Dataclasses: `Session`, `Msg`, `FileTouch`, `SearchHit`, `UsageRow`, `Checkpoint`, `PurgeReport`. |
 | `agentsmith/util.py` | Color/time/text helpers, `die`. |
 | `agentsmith/purge.py` | `deep_purge` (the shred). |
-| `agentsmith/scan.py` | `run`/`scan_file`/`scan_db` (the everywhere-scanner behind `cw redact`). |
+| `agentsmith/scan.py` | `run`/`scan_file`/`scan_db` (the everywhere-scanner behind `asmith redact`). |
 | `agentsmith/config.py` | Shared paths (`CACHE_DIR`, `HARNESSES`). |
 | `agentsmith/backends/base.py` | The `Backend` ABC + shared id/path resolution helpers. |
 | `agentsmith/backends/copilot.py` | `CopilotBackend` + copilot store paths. |
 | `agentsmith/backends/claude.py` | `ClaudeBackend` + claude store paths. |
 | `agentsmith/backends/__init__.py` | `select_backends`, `resolve`, `all_sessions`, `backend_for`. |
-| `agentsmith.sh` | Sourceable bash/zsh wrapper: `cw`, `copilot()` / `claude()`, completions. |
+| `agentsmith.sh` | Sourceable bash/zsh wrapper: `asmith`, `copilot()` / `claude()`, completions. |
 | `README.md` / `AGENTS.md` / `TUTORIAL.md` | User docs / agent-facing docs / hands-on walkthrough. |
 | `pyrefly.toml` | Strict type-check config (`project-includes = ["agentsmith"]`). |
 
@@ -53,7 +53,7 @@ A package, three layers:
      exists on disk.
    - `ClaudeBackend` — JSONL transcripts at
      `~/.claude/projects/<enc-cwd>/<id>.jsonl` (dir name encodes cwd, `/`→`-`).
-     No DB, so it builds a lightweight index cached at `~/.cache/cw/claude-index.json`
+     No DB, so it builds a lightweight index cached at `~/.cache/asmith/claude-index.json`
      keyed on `(mtime, size)`. The name comes from `ai-title` events; usage is
      tokens only (no AIU). Always "resumable".
 3. **Commands** (`cmd_*`): each selects backends via `-H/--harness`
@@ -65,9 +65,9 @@ A package, three layers:
 
 Implement every abstract method of `Backend`, then add it to `select_backends()`
 and the `HARNESSES` tuple. If it can produce a resume command, wire it into
-`cw resume` (the shell) via the `harness` tag that `find --with-harness` prints.
+`asmith resume` (the shell) via the `harness` tag that `find --with-harness` prints.
 
-## The shred (`cw rm`)
+## The shred (`asmith rm`)
 
 `deep_purge(home, id, dry_run, aggressive)` removes *every* trace of a session id
 under a harness home:
@@ -99,7 +99,7 @@ named after the id (per-session dirs, id-named logs/tasks/env, id-named dirs eve
 inside `file-history/`); **pass 2** scrubs the id out of shared content. It only
 **reads** files up to a size cap (`_MAX_SCAN_BYTES` for scrubbable bookkeeping like
 logs/history; a much smaller `_REF_SCAN_BYTES` for files it would only *report*),
-which keeps `cw rm` fast on a real `~/.copilot` full of multi-hundred-MB
+which keeps `asmith rm` fast on a real `~/.copilot` full of multi-hundred-MB
 transcripts. Skip sets are split: `_SKIP_ALWAYS` (`.git`, `node_modules`) is
 skipped in **both** passes; `_SKIP_SCAN` (`rewind-file-snapshots`, `file-history`)
 is skipped only in the **pass-2 content scan** (so pass 1 still deletes id-named
@@ -108,11 +108,11 @@ id, `command-history-state.json` list items with `sessionId`) is pruned surgical
 via `_prune_json`/`_json_belongs` (drop the id's keys/entries, rewrite the rest);
 if the id somehow survives pruning it's reported, never corrupted.
 
-## The everywhere-scanner (`cw redact`)
+## The everywhere-scanner (`asmith redact`)
 
 `deep_purge` targets one **session id** in known bookkeeping spots. `scan.py` is the
 orthogonal tool: find/scrub an **arbitrary string** (a leaked secret) across *all*
-harness state, not just rendered transcripts. `cw grep` only reads `transcript()`;
+harness state, not just rendered transcripts. `asmith grep` only reads `transcript()`;
 `scan.run(homes, rx, mask, apply, reveal, max_bytes, emit)` walks **every file** under
 each home and **every SQLite DB** it finds, so it also covers logs, per-session
 `session.db` files, the FTS5 index, JSON/YAML, tool args, and subagent transcripts.
@@ -161,7 +161,7 @@ carrying an optional `agent` label (`None` = main thread). Subagents:
 - `subagents=False` drops them. `cmd_dump` passes `not args.no_subagents`; `search`,
   `grep`, and internal callers use `subagents=False` (main thread only) for speed.
 
-`cw dump` renders via `render_chat()` (terminal ANSI or `--md`), nesting each
+`asmith dump` renders via `render_chat()` (terminal ANSI or `--md`), nesting each
 subagent run under a `┌── subagent: … ──` boundary. `--color` forces ANSI (e.g.
 into a file); `--raw` streams the underlying transcript file verbatim.
 
@@ -182,10 +182,10 @@ into a file); `--raw` streams the underlying transcript file verbatim.
   `<id>.jsonl` are "sessions").
 - **Never test destructive paths on real data.** Point the env overrides at a
   sandbox: `COPILOT_HOME`, `COPILOT_DB`, `COPILOT_STATE`, `CLAUDE_HOME`,
-  `CW_CACHE`, `CW_SUMMARIES`. The shred test builds a fake `CLAUDE_HOME` with
+  `ASMITH_CACHE`, `ASMITH_SUMMARIES`. The shred test builds a fake `CLAUDE_HOME` with
   id-named vestiges + a second session, shreds, and asserts zero traces of the
   target while the other session stays intact.
-- `cw --harness claude ...` / `-H copilot` scope a command to one harness.
+- `asmith --harness claude ...` / `-H copilot` scope a command to one harness.
 
 ## Gotchas
 

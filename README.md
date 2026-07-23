@@ -1,4 +1,4 @@
-# Agentsmith (`cw`)
+# Agentsmith (`asmith`)
 
 A swiss-army knife for your AI coding-agent sessions, across **two harnesses**:
 
@@ -7,8 +7,9 @@ A swiss-army knife for your AI coding-agent sessions, across **two harnesses**:
 
 List the directories that have sessions, find/resume the right one, render full
 conversations (with nested subagents), full-text search, token/AIU accounting,
-and completely shred sessions you want gone. The command is `cw` (short and
-left-hand-easy); the project is **Agentsmith**.
+and completely shred sessions you want gone. The project is **Agentsmith**, and
+the command is `asmith` (as in *Agent Smith* — the one who tracks sessions down
+and erases them).
 
 New here? Start with the **[TUTORIAL](TUTORIAL.md)** — a hands-on tour with
 copy-paste examples.
@@ -21,7 +22,7 @@ Two parts:
     and `backends/` with `base.py` (the `Backend` ABC), `copilot.py`, `claude.py`,
     and `__init__.py` (selection + cross-harness resolution). Run it directly with
     `python -m agentsmith ...`.
-- **`agentsmith.sh`** — a sourceable bash/zsh wrapper: the `cw` command, the
+- **`agentsmith.sh`** — a sourceable bash/zsh wrapper: the `asmith` command, the
   `copilot()` / `claude()` auto-resume wrappers, and completions.
 
 ## Install
@@ -32,22 +33,22 @@ Source the shell file from your `~/.profile` (or `~/.zshrc` / `~/.bashrc`):
 [ -r "$HOME/code/Agentsmith/agentsmith.sh" ] && . "$HOME/code/Agentsmith/agentsmith.sh"
 ```
 
-That single line defines `cw`, `copilot()`, `claude()`, aliases, and **tab
+That single line defines `asmith`, `copilot()`, `claude()`, aliases, and **tab
 completion** (bash + zsh). Requires `python3` (stdlib only) and the `copilot` (and,
 for Claude, `claude`) CLI on `PATH`. Override the interpreter with
-`CW_PYTHON=/path/to/python3`.
+`ASMITH_PYTHON=/path/to/python3`.
 
 Tab completion is registered automatically when you source the file. The
-candidates are computed by the CLI itself (`cw __complete`, which introspects the
+candidates are computed by the CLI itself (`asmith __complete`, which introspects the
 argument parser), so they never drift from the actual commands and flags. If you
 prefer to install completion without sourcing the whole file, use the standard
 generator instead:
 
 ```sh
 # bash (~/.bashrc)
-source <(cw completion bash)
+source <(asmith completion bash)
 # zsh (~/.zshrc, after compinit)
-source <(cw completion zsh)
+source <(asmith completion zsh)
 ```
 
 ## Picking a harness
@@ -65,7 +66,7 @@ commands auto-detect which harness owns an id (UUIDs never collide).
   that also keeps "archived" sessions). Usage includes AIU.
 - **claude**: `~/.claude/projects/<enc-cwd>/<id>.jsonl` transcripts (one file per
   session; titles come from the transcript). Always resumable. Usage is tokens
-  only (Claude has no AIU). A per-file index is cached at `~/.cache/cw/claude-index.json`.
+  only (Claude has no AIU). A per-file index is cached at `~/.cache/asmith/claude-index.json`.
 
 ## The session name
 
@@ -87,9 +88,9 @@ Anywhere a command takes `<session>` you can pass:
 
 The 8-character hash shown in listings (`10b72094`) is just a **display
 abbreviation** of the full UUID — every command accepts it (or any unique prefix)
-directly, and `cw resolve <hash>` prints the full id. Note that only sessions
-marked **`*`** in `cw list` are **resumable**; a **`.`** means the session is kept
-in the index for reference but its transcript is gone, so neither `cw resume` nor
+directly, and `asmith resolve <hash>` prints the full id. Note that only sessions
+marked **`*`** in `asmith list` are **resumable**; a **`.`** means the session is kept
+in the index for reference but its transcript is gone, so neither `asmith resume` nor
 the underlying CLI can reopen it (regardless of whether you use the short hash or
 the full id).
 
@@ -97,53 +98,53 @@ the full id).
 
 | Command | What it does |
 | --- | --- |
-| `cw list` (`ls`) | List **all** sessions (path + name, newest first). `-S/--sort date\|agent\|id\|turns\|name\|dir`, `-r`, `-d DIR`, `--here`, `--repo`, `-g GREP`, `-n N`. |
-| `cw tree` | Sessions grouped **by directory** (or `--by agent`), each as a one-liner. `-S/--sort`, `-r`, `--resumable`. |
-| `cw dirs` | Directories that have sessions (columns explained in `cw dirs --help`). `--by-count`. |
-| `cw find [dir]` | Sessions for a directory. `-1` prints the newest id; `--with-harness`, `--resumable`, `--exact`. |
-| `cw resolve [id/prefix/path]` | Print the **full** session id for a short hash/prefix/dir (`--resumable`, `--with-harness`). |
-| `cw show <session>` | Metadata: cwd, repo/branch, times, turns, files, tokens/AIU, checkpoints, resume line. |
-| `cw dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
-| `cw search <query…>` | Search across sessions (copilot: FTS5; claude: transcript scan). |
-| `cw grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
-| `cw redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under both homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
-| `cw files <session>` | Files touched in a session. |
-| `cw checkpoints <session>` (`cp`) | Checkpoints (copilot only). `-v` for next steps. |
-| `cw usage [session]` | Token/AIU usage for a session, or a cross-harness leaderboard. |
-| `cw recent [-n N]` | Most recent sessions across all directories. |
-| `cw path [session]` | Print the on-disk location (default: session for cwd). |
-| `cw stats` | Per-harness totals (sessions, resumable, dirs, span). `--usage` adds AIU. |
-| `cw rm <id/path…>` (`prune`) | **Shred** session(s) — no vestiges. Takes ids/prefixes **or a path** (all sessions under it). `-y`, `--dry-run`, `-v`, `--aggressive`. |
-| `cw purge` | Shred all **empty** sessions (no transcript, 0 turns). `-y`, `--dry-run`, `-v`, `-H`. |
-| `cw resume [-H h] [target]` | Resume a session — `target` is a **dir** (default: cwd) *or* an **id/prefix** (shell; launches the right CLI). |
-| `cw cd [session]` | `cd` into a session's on-disk location (shell). |
-| `cw ids` | Print session ids, one per line (scripting / completion). `--full` for full uuids. |
-| `cw completion <bash\|zsh>` | Print the tab-completion script for your shell. |
+| `asmith list` (`ls`) | List **all** sessions (path + name, newest first). `-S/--sort date\|agent\|id\|turns\|name\|dir`, `-r`, `-d DIR`, `--here`, `--repo`, `-g GREP`, `-n N`. |
+| `asmith tree` | Sessions grouped **by directory** (or `--by agent`), each as a one-liner. `-S/--sort`, `-r`, `--resumable`. |
+| `asmith dirs` | Directories that have sessions (columns explained in `asmith dirs --help`). `--by-count`. |
+| `asmith find [dir]` | Sessions for a directory. `-1` prints the newest id; `--with-harness`, `--resumable`, `--exact`. |
+| `asmith resolve [id/prefix/path]` | Print the **full** session id for a short hash/prefix/dir (`--resumable`, `--with-harness`). |
+| `asmith show <session>` | Metadata: cwd, repo/branch, times, turns, files, tokens/AIU, checkpoints, resume line. |
+| `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
+| `asmith search <query…>` | Search across sessions (copilot: FTS5; claude: transcript scan). |
+| `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
+| `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under both homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
+| `asmith files <session>` | Files touched in a session. |
+| `asmith checkpoints <session>` (`cp`) | Checkpoints (copilot only). `-v` for next steps. |
+| `asmith usage [session]` | Token/AIU usage for a session, or a cross-harness leaderboard. |
+| `asmith recent [-n N]` | Most recent sessions across all directories. |
+| `asmith path [session]` | Print the on-disk location (default: session for cwd). |
+| `asmith stats` | Per-harness totals (sessions, resumable, dirs, span). `--usage` adds AIU. |
+| `asmith rm <id/path…>` (`prune`) | **Shred** session(s) — no vestiges. Takes ids/prefixes **or a path** (all sessions under it). `-y`, `--dry-run`, `-v`, `--aggressive`. |
+| `asmith purge` | Shred all **empty** sessions (no transcript, 0 turns). `-y`, `--dry-run`, `-v`, `-H`. |
+| `asmith resume [-H h] [target]` | Resume a session — `target` is a **dir** (default: cwd) *or* an **id/prefix** (shell; launches the right CLI). |
+| `asmith cd [session]` | `cd` into a session's on-disk location (shell). |
+| `asmith ids` | Print session ids, one per line (scripting / completion). `--full` for full uuids. |
+| `asmith completion <bash\|zsh>` | Print the tab-completion script for your shell. |
 
 ## The `copilot()` / `claude()` wrappers
 
 Sourcing the file defines both. Bare `copilot` (or `claude`) resumes the newest
 resumable session whose cwd exactly matches the current directory; with no match
 it starts fresh. Any arguments pass straight through to the real CLI. They resolve
-via `cw find --one --resumable --exact -H <harness> .`. `copilot()` replaces the
+via `asmith find --one --resumable --exact -H <harness> .`. `copilot()` replaces the
 inline function that used to live in `~/.profile`.
 
-## Reading a conversation (`cw dump`)
+## Reading a conversation (`asmith dump`)
 
-`cw dump <session>` renders a session as a readable chat — colored in a terminal,
+`asmith dump <session>` renders a session as a readable chat — colored in a terminal,
 plain when piped:
 
 ```sh
-cw dump 10b72094               # user + assistant text (roles, tool calls one-lined)
-cw dump 10b72094 -t -R         # + tool args/results (truncated) and reasoning
-cw dump 10b72094 --no-subagents  # hide subagent (task) turns
-cw dump 10b72094 --md > chat.md  # Markdown (view with glow/bat/VS Code)
-cw dump 10b72094 --color -o chat.ansi   # keep ANSI in the file; `cat chat.ansi`
-cw dump 10b72094 --raw > raw.jsonl      # the underlying transcript file, verbatim
+asmith dump 10b72094               # user + assistant text (roles, tool calls one-lined)
+asmith dump 10b72094 -t -R         # + tool args/results (truncated) and reasoning
+asmith dump 10b72094 --no-subagents  # hide subagent (task) turns
+asmith dump 10b72094 --md > chat.md  # Markdown (view with glow/bat/VS Code)
+asmith dump 10b72094 --color -o chat.ansi   # keep ANSI in the file; `cat chat.ansi`
+asmith dump 10b72094 --raw > raw.jsonl      # the underlying transcript file, verbatim
 ```
 
 **Subagents.** Copilot keeps `task`-tool subagent turns inline in the transcript;
-Claude keeps them in separate `subagents/*.jsonl` files. `cw dump` shows both by
+Claude keeps them in separate `subagents/*.jsonl` files. `asmith dump` shows both by
 default, **nested and labeled** under a `┌── subagent: … ──` boundary, and
 `--no-subagents` hides them. (A Claude session can have dozens of subagents, so
 that flag is handy there.)
@@ -152,9 +153,9 @@ Note the default view is a cleaned reconstruction (user/assistant text, system
 reminders stripped, tool results truncated). Use `--raw` for the byte-for-byte
 transcript file.
 
-## Shredding sessions (`cw rm`)
+## Shredding sessions (`asmith rm`)
 
-`cw rm <id…>` removes **every** trace of a session — no record, no transcript,
+`asmith rm <id…>` removes **every** trace of a session — no record, no transcript,
 nothing:
 
 - deletes every file/dir named after the id (transcripts, per-session dirs,
@@ -170,49 +171,49 @@ Verified by a sandbox that plants the id in every table and vestige location: af
 one `rm` (or `purge`) there are **zero** id-named files, **zero** content
 references, and **zero** DB rows left, while other sessions stay intact.
 
-`cw rm` takes **ids, unique prefixes, or a path** — a path expands to *every*
+`asmith rm` takes **ids, unique prefixes, or a path** — a path expands to *every*
 session for that directory and below (great for wiping a whole project). It
 refuses the current live session (skips it in bulk), confirms unless `-y`, and
 previews everything with `--dry-run` (`-v` to list every path).
 
 ```sh
-cw rm 386cd898 --dry-run          # preview the shred
-cw rm 386cd898 111b6b0f -y        # shred two, no confirmation
-cw rm 10b72094 --aggressive -v    # also scrub cross-references, list everything
-cw rm ~/code/oldproject --dry-run # every session under a directory
+asmith rm 386cd898 --dry-run          # preview the shred
+asmith rm 386cd898 111b6b0f -y        # shred two, no confirmation
+asmith rm 10b72094 --aggressive -v    # also scrub cross-references, list everything
+asmith rm ~/code/oldproject --dry-run # every session under a directory
 ```
 
-## Purging empty sessions (`cw purge`)
+## Purging empty sessions (`asmith purge`)
 
 Over time the store fills with **empty shells** — sessions with no on-disk
 transcript and 0 turns (nothing was ever said), which can't be resumed or read.
-`cw purge` shreds all of them in one go:
+`asmith purge` shreds all of them in one go:
 
 ```sh
-cw purge --dry-run    # list the empties (fast)
-cw purge              # confirm, then shred them all
-cw purge -H copilot   # scope to one agent
+asmith purge --dry-run    # list the empties (fast)
+asmith purge              # confirm, then shred them all
+asmith purge -H copilot   # scope to one agent
 ```
 
-It uses the same shredding as `cw rm`, skips the live session, and confirms unless
+It uses the same shredding as `asmith rm`, skips the live session, and confirms unless
 `-y`.
 
-## Scrubbing a leaked secret (`cw redact`)
+## Scrubbing a leaked secret (`asmith redact`)
 
-`cw grep` searches only the rendered **conversation**. If a password, token, or key
+`asmith grep` searches only the rendered **conversation**. If a password, token, or key
 leaked into an agent's state, it can also land in logs, per-session `session.db`
 files, Copilot's FTS5 search index, JSON/YAML bookkeeping, tool arguments, and
-subagent transcripts. `cw redact` is the leak hunter: it walks **every file** under
+subagent transcripts. `asmith redact` is the leak hunter: it walks **every file** under
 both homes (any type, no size cap by default) **and every SQLite database** it finds
 there, so it catches all of it.
 
 ```sh
-cw redact 'hunter2!' --dry-run       # find everywhere, totals only (read-only)
-cw redact 'hunter2!' --dry-run -v     # ...and list every match (masked)
-cw redact 'hunter2!' --dry-run -m 1   # quick "is it anywhere?" — stop at the first
-cw redact 'hunter2!'                  # confirm, then overwrite every occurrence
-cw redact 'sk-[a-z0-9]+' --regex      # regex mode (default is literal — safer)
-cw redact 'hunter2!' --mask '-'       # mask with a different character
+asmith redact 'hunter2!' --dry-run       # find everywhere, totals only (read-only)
+asmith redact 'hunter2!' --dry-run -v     # ...and list every match (masked)
+asmith redact 'hunter2!' --dry-run -m 1   # quick "is it anywhere?" — stop at the first
+asmith redact 'hunter2!'                  # confirm, then overwrite every occurrence
+asmith redact 'sk-[a-z0-9]+' --regex      # regex mode (default is literal — safer)
+asmith redact 'hunter2!' --mask '-'       # mask with a different character
 ```
 
 - **`--dry-run` is the finder.** By default it counts **everything** (like `grep`, no
@@ -240,8 +241,8 @@ cw redact 'hunter2!' --mask '-'       # mask with a different character
 
 - `COPILOT_HOME` / `COPILOT_DB` / `COPILOT_STATE` — copilot store locations.
 - `CLAUDE_HOME` — claude store location.
-- `CW_CACHE` (default `~/.cache/cw`) — where the Claude index is cached.
-- `CW_PYTHON` — interpreter used by the shell wrapper.
+- `ASMITH_CACHE` (default `~/.cache/asmith`) — where the Claude index is cached.
+- `ASMITH_PYTHON` — interpreter used by the shell wrapper.
 - `NO_COLOR` — disable ANSI color (or pass `--no-color` on any command).
 
 These double as the way to point the tool at a sandbox for testing destructive

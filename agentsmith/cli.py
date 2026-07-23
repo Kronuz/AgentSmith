@@ -466,7 +466,9 @@ def cmd_search(args: argparse.Namespace) -> None:
         print(prefix + _clip(label, cols - len(strip_ansi(prefix))))
         print(f"   {_clip(h.snippet, cols - 3)}")
     print(
-        dim(f"\n{min(len(hits), args.number)} matches  ·  dump one with: cw dump <id>")
+        dim(
+            f"\n{min(len(hits), args.number)} matches  ·  dump one with: asmith dump <id>"
+        )
     )
 
 
@@ -558,7 +560,7 @@ def cmd_ids(args: argparse.Namespace) -> None:
         print(s.id if args.full else short(s.id))
 
 
-# Shell-only subcommands (handled by the cw() wrapper, absent from this parser) and
+# Shell-only subcommands (handled by the asmith() wrapper, absent from this parser) and
 # the kind of positional each completes: "ids", "dirs", or "both".
 _SHELL_COMMANDS = {"resume": "both", "r": "both", "cd": "ids"}
 _DIRS_SENTINEL = "__DIRS__"  # the shell expands this line to directory names
@@ -637,28 +639,28 @@ def cmd_complete(args: argparse.Namespace) -> None:
         return
 
 
-_BASH_COMPLETION = r"""_cw_complete() {
+_BASH_COMPLETION = r"""_asmith_complete() {
   local cur="${COMP_WORDS[COMP_CWORD]}" out
-  out="$(cw __complete -- "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null)"
+  out="$(asmith __complete -- "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null)"
   COMPREPLY=()
   case "$out" in
     *__DIRS__*) COMPREPLY+=($(compgen -d -- "$cur")); out="${out//__DIRS__/}" ;;
   esac
   COMPREPLY+=($(compgen -W "$out" -- "$cur"))
 }
-complete -F _cw_complete cw
+complete -F _asmith_complete asmith
 """
 
-_ZSH_COMPLETION = r"""#compdef cw
-_cw_complete() {
+_ZSH_COMPLETION = r"""#compdef asmith
+_asmith_complete() {
   local -a lines; local l
-  lines=("${(@f)$(cw __complete -- "${(@)words[2,CURRENT]}" 2>/dev/null)}")
+  lines=("${(@f)$(asmith __complete -- "${(@)words[2,CURRENT]}" 2>/dev/null)}")
   for l in $lines; do
     if [[ $l == __DIRS__ ]]; then _files -/ 2>/dev/null
     elif [[ -n $l ]]; then compadd -- $l; fi
   done
 }
-compdef _cw_complete cw
+compdef _asmith_complete asmith
 """
 
 
@@ -1053,7 +1055,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     p = argparse.ArgumentParser(
-        prog="cw",
+        prog="asmith",
         description="Swiss-army knife for AI coding-agent sessions.",
         formatter_class=_CommandHelpFormatter,
     )

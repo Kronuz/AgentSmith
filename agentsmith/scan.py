@@ -1,6 +1,6 @@
 """Everywhere-scanner: find or redact a string across ALL of a harness's state.
 
-``cw grep`` reads only rendered transcripts. This module is the heavy hammer for
+``asmith grep`` reads only rendered transcripts. This module is the heavy hammer for
 secret hygiene: it walks *every* file under a harness home (any type, no size cap by
 default) and every SQLite database it finds there -- including Copilot's FTS5 search
 index -- so a leaked password can be located and scrubbed wherever it came to rest.
