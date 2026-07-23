@@ -414,8 +414,10 @@ def cmd_dump(args: argparse.Namespace) -> None:
         return
     msgs = b.transcript(s.id, subagents=not args.no_subagents)
 
-    # decide color: forced on with --color; off when writing a plain file; else auto
-    if args.md:
+    # decide color: --no-color always wins; --color forces on; plain file → off; else auto
+    if args.no_color:
+        set_color(False)
+    elif args.md:
         set_color(False)
     elif args.color:
         set_color(True)
@@ -435,7 +437,9 @@ def cmd_dump(args: argparse.Namespace) -> None:
 
     if args.out:
         Path(args.out).write_text(
-            text if (args.color and not args.md) else strip_ansi(text)
+            text
+            if (args.color and not args.no_color and not args.md)
+            else strip_ansi(text)
         )
         print(f"wrote {args.out} ({len(msgs)} messages)")
     else:
@@ -1042,6 +1046,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="which agent's sessions to use (default: all)",
     )
+    common.add_argument(
+        "--no-color",
+        action="store_true",
+        help="disable ANSI color (also honored via the NO_COLOR env var)",
+    )
 
     p = argparse.ArgumentParser(
         prog="cw",
@@ -1392,6 +1401,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
+    if getattr(args, "no_color", False):
+        set_color(False)
     try:
         args.func(args)
     except (KeyboardInterrupt, EOFError):

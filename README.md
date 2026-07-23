@@ -242,7 +242,7 @@ cw redact 'hunter2!' --mask '-'       # mask with a different character
 - `CLAUDE_HOME` — claude store location.
 - `CW_CACHE` (default `~/.cache/cw`) — where the Claude index is cached.
 - `CW_PYTHON` — interpreter used by the shell wrapper.
-- `NO_COLOR` — disable ANSI color.
+- `NO_COLOR` — disable ANSI color (or pass `--no-color` on any command).
 
 These double as the way to point the tool at a sandbox for testing destructive
 commands without touching real data.
