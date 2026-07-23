@@ -110,7 +110,7 @@ the full id).
 | `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under both homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
 | `asmith files <session>` | Files touched in a session. |
 | `asmith checkpoints <session>` (`cp`) | Checkpoints (copilot only). `-v` for next steps. |
-| `asmith usage [session]` | Token/AIU usage for a session, or a cross-harness leaderboard. |
+| `asmith usage [session]` | Per-model tokens (input/output, cache read/write, reasoning) + AIU for one session, or a cross-harness leaderboard ranked by **wtc** (weighted token count: a cost-weighted proxy comparable across harnesses) with cache-hit %. See `asmith usage --help`. |
 | `asmith recent [-n N]` | Most recent sessions across all directories. |
 | `asmith path [session]` | Print the on-disk location (default: session for cwd). |
 | `asmith stats` | Per-harness totals (sessions, resumable, dirs, span). `--usage` adds AIU. |

@@ -20,7 +20,7 @@ from .backends import (
     resolve,
     select_backends,
 )
-from .model import Msg, PurgeReport, SearchHit, Session
+from .model import CACHE_READ_WEIGHT, Msg, PurgeReport, SearchHit, Session
 from .util import (
     ago,
     bold,
@@ -62,6 +62,11 @@ def _pad(text: str, width: int, right: bool = False) -> str:
     """Pad ``text`` to a visible ``width``, ignoring any ANSI color codes it holds."""
     gap = max(0, width - len(strip_ansi(text)))
     return " " * gap + text if right else text + " " * gap
+
+
+def _short_model(m: str) -> str:
+    """Compact model label for tight columns (drop the 'claude-' vendor prefix)."""
+    return m.split("-", 1)[1] if m.startswith("claude-") else m
 
 
 def _row_tail(cwd: str | None, name: str | None, budget: int) -> str:
@@ -512,44 +517,76 @@ def cmd_usage(args: argparse.Namespace) -> None:
             print(dim("(no usage recorded)"))
             return
         print(bold(short(s.id)) + f"  [{s.harness}] usage by model:")
+        has_aiu = any(r.aiu is not None for r in rows)
         tot_aiu = 0.0
+        ti = to = tcr = tcw = 0
         for r in rows:
-            model = r.model.ljust(20)
-            tail = ""
-            if r.aiu is not None:
-                tot_aiu += r.aiu
-                tail = "  " + yellow(f"{r.aiu:8.1f} AIU")
+            ti += r.input
+            to += r.output
+            tcr += r.cache_read
+            tcw += r.cache_write
+            tot_aiu += r.aiu or 0
+            reason = f"  reason {r.reasoning:>7,}" if r.reasoning else ""
+            tail = "  " + yellow(f"{r.aiu:8.1f} AIU") if r.aiu is not None else ""
             print(
-                f"  {model}  {str(r.calls).rjust(4)} calls  "
-                f"↑{r.input:>9,} ↓{r.output:>7,}  cache {r.cache:>10,}{tail}"
+                f"  {r.model.ljust(22)}  {str(r.calls).rjust(4)} calls  "
+                f"↑{r.input:>9,} ↓{r.output:>7,}  "
+                f"cache r {r.cache_read:>9,} w {r.cache_write:>7,}{reason}{tail}"
             )
-        if tot_aiu:
-            print(dim(f"  total: {tot_aiu:.1f} AIU"))
+        eff = ti + to + tcw + CACHE_READ_WEIGHT * tcr
+        hit = tcr / (ti + tcr) * 100 if (ti + tcr) else 0.0
+        parts = [f"{tot_aiu:,.1f} AIU"] if has_aiu else []
+        parts.append(f"{eff:,.0f} wtc")
+        parts.append(f"cache hit {hit:.0f}%")
+        if len(rows) > 1:
+            parts.append(f"{len(rows)} models")
+        print(dim("  total: " + " · ".join(parts)))
         return
-    # leaderboard across sessions, sorted by output tokens (common metric)
-    scored: list[tuple[Session, int, float]] = []
+    # leaderboard across sessions, ranked by "effective tokens" -- a cost-weighted
+    # token proxy that is comparable across harnesses (copilot AIU and all timing
+    # are copilot-only, so only token counts can anchor a cross-harness metric).
+    scored: list[tuple[Session, float, float, float, str, int]] = []
     for s in all_sessions(backends):
         b = backend_for(backends, s.harness)
         rows = b.usage(s.id)
-        otok = sum(r.output for r in rows)
+        if not rows:
+            continue
+        eff = sum(r.effective for r in rows)
+        if eff <= 0:
+            continue
+        ti = sum(r.input for r in rows)
+        tcr = sum(r.cache_read for r in rows)
+        hit = tcr / (ti + tcr) * 100 if (ti + tcr) else 0.0
         aiu = sum(r.aiu or 0 for r in rows)
-        if otok or aiu:
-            scored.append((s, otok, aiu))
+        dominant = max(rows, key=lambda r: r.effective).model
+        scored.append((s, eff, hit, aiu, dominant, len(rows)))
     scored.sort(key=lambda x: x[1], reverse=True)
     top = scored[: args.number]
     # one fixed-width, right-aligned metric column so the id/path columns line up
-    # (copilot shows AIU; claude has no AIU, so it shows output tokens)
-    metrics = [f"{aiu:,.1f} AIU" if aiu else f"{otok:,} out" for _, otok, aiu in top]
-    mw = max((len(m) for m in metrics), default=0)
+    effs = [f"{eff:,.0f} wtc" for _, eff, *_ in top]
+    ew = max((len(e) for e in effs), default=0)
     multi = len(backends) > 1
     cols = _term_cols()
-    for (s, otok, aiu), plain in zip(top, metrics):
+    for (s, _eff, hit, aiu, dominant, nmodels), ecell in zip(top, effs):
         badge = (harness_badge(s.harness) + " ") if multi else ""
-        cell = plain.rjust(mw)
-        metric = yellow(cell) if aiu else dim(cell)
-        prefix = f"{metric}  {badge}{bold(short(s.id))}  "
-        print(prefix + _row_tail(s.cwd, s.name, cols - len(strip_ansi(prefix))))
-    print(dim(f"\ntop {min(len(scored), args.number)} by output tokens"))
+        prefix = (
+            f"{yellow(ecell.rjust(ew))}  {dim(f'{hit:3.0f}%')}  "
+            f"{badge}{bold(short(s.id))}  "
+        )
+        suffix_parts: list[str] = []
+        if nmodels > 1:
+            suffix_parts.append(f"{_short_model(dominant)} +{nmodels - 1} more")
+        if aiu:
+            suffix_parts.append(f"{aiu:,.0f} AIU")
+        suffix = ("  " + dim(" · ".join(suffix_parts))) if suffix_parts else ""
+        budget = cols - len(strip_ansi(prefix)) - len(strip_ansi(suffix))
+        print(prefix + _row_tail(s.cwd, s.name, budget) + suffix)
+    print(
+        dim(
+            f"\ntop {min(len(scored), args.number)} by wtc, weighted token count "
+            "(input + output + cache-write + 0.1×cache-read) · see: asmith usage --help"
+        )
+    )
 
 
 def cmd_recent(args: argparse.Namespace) -> None:
@@ -1235,7 +1272,20 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_checkpoints)
 
     sp = sub.add_parser(
-        "usage", parents=[common], help="token/AIU usage or leaderboard"
+        "usage",
+        parents=[common],
+        help="token/AIU usage or leaderboard",
+        description=(
+            "Per-session token usage (input/output, cache read+write, reasoning) "
+            "and AIU, or a cross-harness leaderboard when no session is given. "
+            "The leaderboard ranks by wtc (weighted token count) = input + output "
+            "+ cache-write + 0.1*cache-read: a cost-weighted proxy built only from "
+            "token counts, so it is comparable across harnesses (Copilot AIU and "
+            "timing are Copilot-only). It tracks Copilot's real AIU at ~0.99. "
+            "Cache reads are discounted to 10% since cached input is far cheaper "
+            "than fresh input. 'cache hit' is cache-read / (input + cache-read). "
+            "Multi-model sessions show the dominant model, e.g. 'opus-4.8 +1 more'."
+        ),
     )
     _mark(
         sp.add_argument(

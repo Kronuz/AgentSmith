@@ -283,15 +283,22 @@ class ClaudeBackend(Backend):
             model = msg.get("model", "?")
             if model.startswith("<synthetic"):
                 continue
-            a = agg.setdefault(model, {"calls": 0, "i": 0, "o": 0, "cache": 0})
+            a = agg.setdefault(model, {"calls": 0, "i": 0, "o": 0, "cr": 0, "cw": 0})
             a["calls"] += 1
             a["i"] += u.get("input_tokens", 0) or 0
             a["o"] += u.get("output_tokens", 0) or 0
-            a["cache"] += (u.get("cache_read_input_tokens", 0) or 0) + (
-                u.get("cache_creation_input_tokens", 0) or 0
-            )
+            a["cr"] += u.get("cache_read_input_tokens", 0) or 0
+            a["cw"] += u.get("cache_creation_input_tokens", 0) or 0
         return [
-            UsageRow(model, a["calls"], a["i"], a["o"], a["cache"], aiu=None)
+            UsageRow(
+                model,
+                a["calls"],
+                a["i"],
+                a["o"],
+                cache_read=a["cr"],
+                cache_write=a["cw"],
+                aiu=None,
+            )
             for model, a in agg.items()
         ]
 

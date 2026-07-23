@@ -160,12 +160,16 @@ $ asmith show 10b72094
 
 $ asmith files 10b72094                # every file the session touched
 $ asmith checkpoints 0feccbe6 -v       # Copilot checkpoints + next steps
-$ asmith usage 413fc324                # tokens + AIU for one session, by model
-$ asmith usage                         # leaderboard: biggest sessions by output
+$ asmith usage 413fc324                # per-model tokens (in/out, cache r/w, reasoning) + AIU
+$ asmith usage                         # leaderboard by wtc, weighted token count (+ cache-hit %)
 $ asmith stats                         # per-harness totals
 ```
 
-AIU (Copilot's billing unit) shows where available; Claude reports tokens only.
+AIU (Copilot's billing unit) shows where available; Claude reports tokens only. The
+leaderboard ranks by **wtc** (weighted token count = `input + output + cache-write + 0.1×cache-read`),
+a cost-weighted proxy that tracks Copilot's AIU at ~0.99 and is comparable across both
+harnesses. Multi-model sessions are tagged with the dominant model (`opus-4.8 +1 more`).
+Run `asmith usage --help` for the full definition.
 
 ---
 

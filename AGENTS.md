@@ -21,7 +21,7 @@ because it needed a working agent (`copilot -p`) that isn't reliably available.
 | --- | --- |
 | `agentsmith/` | The engine, a Python package (stdlib only, no deps). Run as `python -m agentsmith`. |
 | `agentsmith/cli.py` | Argument parsing + every `cmd_*` command. |
-| `agentsmith/model.py` | Dataclasses: `Session`, `Msg`, `FileTouch`, `SearchHit`, `UsageRow`, `Checkpoint`, `PurgeReport`. |
+| `agentsmith/model.py` | Dataclasses: `Session`, `Msg`, `FileTouch`, `SearchHit`, `UsageRow` (input/output/cache_read/cache_write/reasoning/aiu, with an `effective` cost-proxy property shown as **wtc**, weighted token count), `Checkpoint`, `PurgeReport`. |
 | `agentsmith/util.py` | Color/time/text helpers, `die`. |
 | `agentsmith/purge.py` | `deep_purge` (the shred). |
 | `agentsmith/scan.py` | `run`/`scan_file`/`scan_db` (the everywhere-scanner behind `asmith redact`). |
@@ -49,13 +49,16 @@ A package, three layers:
    implementations. Each maps its harness's native storage onto the shared model.
    - `CopilotBackend` — SQLite (`~/.copilot/session-store.db`) for metadata +
      the per-session `~/.copilot/session-state/<id>/events.jsonl` transcript.
-     Usage carries AIU (`total_nano_aiu / 1e9`). "Resumable" = the events.jsonl
+     Usage carries AIU (`total_nano_aiu / 1e9`) plus token counts (input, output,
+     cache read **and** write, reasoning). "Resumable" = the events.jsonl
      exists on disk.
    - `ClaudeBackend` — JSONL transcripts at
      `~/.claude/projects/<enc-cwd>/<id>.jsonl` (dir name encodes cwd, `/`→`-`).
      No DB, so it builds a lightweight index cached at `~/.cache/asmith/claude-index.json`
      keyed on `(mtime, size)`. The name comes from `ai-title` events; usage is
-     tokens only (no AIU). Always "resumable".
+     tokens only (no AIU; cache split into read = `cache_read_input_tokens` and
+     write = `cache_creation_input_tokens`; no separate reasoning count). Always
+     "resumable".
 3. **Commands** (`cmd_*`): each selects backends via `-H/--harness`
    (`copilot`/`claude`/`all`, default `all`), then iterates. Session-specific
    commands resolve an id/prefix/path across all selected backends

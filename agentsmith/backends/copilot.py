@@ -204,7 +204,8 @@ class CopilotBackend(Backend):
             self.con()
             .execute(
                 "SELECT model, COUNT(*) calls, SUM(input_tokens) i, SUM(output_tokens) o, "
-                "SUM(cache_read_tokens) cr, SUM(total_nano_aiu) aiu "
+                "SUM(cache_read_tokens) cr, SUM(cache_write_tokens) cw, "
+                "SUM(reasoning_tokens) rt, SUM(total_nano_aiu) aiu "
                 "FROM assistant_usage_events WHERE session_id = ? GROUP BY model",
                 (session_id,),
             )
@@ -216,7 +217,9 @@ class CopilotBackend(Backend):
                 calls=r["calls"],
                 input=r["i"] or 0,
                 output=r["o"] or 0,
-                cache=r["cr"] or 0,
+                cache_read=r["cr"] or 0,
+                cache_write=r["cw"] or 0,
+                reasoning=r["rt"] or 0,
                 aiu=(r["aiu"] or 0) / 1e9,
             )
             for r in rows
