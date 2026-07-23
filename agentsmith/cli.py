@@ -536,11 +536,17 @@ def cmd_usage(args: argparse.Namespace) -> None:
         if otok or aiu:
             scored.append((s, otok, aiu))
     scored.sort(key=lambda x: x[1], reverse=True)
+    top = scored[: args.number]
+    # one fixed-width, right-aligned metric column so the id/path columns line up
+    # (copilot shows AIU; claude has no AIU, so it shows output tokens)
+    metrics = [f"{aiu:,.1f} AIU" if aiu else f"{otok:,} out" for _, otok, aiu in top]
+    mw = max((len(m) for m in metrics), default=0)
     multi = len(backends) > 1
     cols = _term_cols()
-    for s, otok, aiu in scored[: args.number]:
+    for (s, otok, aiu), plain in zip(top, metrics):
         badge = (harness_badge(s.harness) + " ") if multi else ""
-        metric = yellow(f"{aiu:8.1f} AIU") if aiu else dim(f"{otok:>10,} out")
+        cell = plain.rjust(mw)
+        metric = yellow(cell) if aiu else dim(cell)
         prefix = f"{metric}  {badge}{bold(short(s.id))}  "
         print(prefix + _row_tail(s.cwd, s.name, cols - len(strip_ansi(prefix))))
     print(dim(f"\ntop {min(len(scored), args.number)} by output tokens"))
