@@ -30,6 +30,7 @@ class ContinuationResult:
 @dataclass
 class GlobalImportResult:
     root: Path
+    handoff: Path
     files: int
 
 
@@ -357,6 +358,27 @@ def launch_command(result: ContinuationResult, harness: str, cwd: Path) -> list[
     raise ValueError(f"unsupported destination harness: {harness}")
 
 
+def global_launch_command(result: GlobalImportResult, harness: str) -> list[str]:
+    prompt = (
+        f"Read {result.handoff}. Audit the editable candidate configuration against "
+        "the live global configuration. Do not install or modify anything until you "
+        "have presented the keep/adapt/omit plan and I explicitly approve it."
+    )
+    if harness == "codex":
+        return [
+            "codex",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "-C",
+            str(Path.home()),
+            prompt,
+        ]
+    if harness == "claude":
+        return ["claude", "--dangerously-skip-permissions", prompt]
+    if harness == "copilot":
+        return ["copilot", "--yolo", prompt]
+    raise ValueError(f"unsupported destination harness: {harness}")
+
+
 def prepare_global_import(
     source: Path, destination: Path | None = None
 ) -> GlobalImportResult:
@@ -377,48 +399,139 @@ def prepare_global_import(
     staging = Path(tempfile.mkdtemp(prefix=f".{root.name}.", dir=root.parent))
     environment = manifest.get("environment")
     entries = environment if isinstance(environment, list) else []
+    candidate_records: list[dict[str, object]] = []
     try:
-        _copy_source(source, staging, 1)
+        shutil.copytree(source, staging / "source")
         lines = [
-            "# Global agent configuration import",
+            "# Global agent configuration handoff",
             "",
             (
-                "This is staged for review. Nothing has been installed. Compare each "
-                "file with its destination and merge deliberately; settings and hooks "
-                "can contain machine-specific commands or inline secrets."
+                "Nothing has been installed. `source/` is the untouched verified "
+                "export; `candidate/` is the visible, editable selection proposed "
+                "for import."
             ),
+            "",
+            "## Required review protocol",
+            "",
+            (
+                "1. Treat deletion from `candidate/` as an explicit user exclusion. "
+                "Never restore a deleted candidate from `source/`."
+            ),
+            (
+                "2. Inventory the files that actually remain in `candidate/`; do not "
+                "rely blindly on this handoff or the original manifest."
+            ),
+            (
+                "3. Compare every remaining candidate with live configuration. Merge "
+                "deliberately; never overwrite a live file wholesale without "
+                "justification."
+            ),
+            (
+                "4. Critically assess instructions and hooks for this machine and work "
+                "environment. Flag restrictions on SSH, networking, tools, filesystem "
+                "access, external services, internal/company systems, or agent autonomy."
+            ),
+            (
+                "5. Check references and dependencies among kept files. If a kept file "
+                "references a deleted or missing file, propose removing/adapting the "
+                "reference or restoring the dependency, and ask the user which."
+            ),
+            (
+                "6. Present a keep/adapt/omit plan, all conflicts, and all potentially "
+                "functionality-limiting policies. Ask for explicit approval before "
+                "writing anything under the live home configuration."
+            ),
+            "",
+            "## Candidate destination map",
             "",
         ]
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
             bundle_path = str(entry.get("path", "?"))
+            relative_source = Path(bundle_path)
+            if relative_source.is_absolute() or ".." in relative_source.parts:
+                raise ValueError(f"unsafe environment path: {bundle_path}")
+            exported = source / relative_source
+            if not exported.is_file():
+                raise ValueError(f"missing exported environment file: {bundle_path}")
+            candidate_parts = relative_source.parts
+            if candidate_parts and candidate_parts[0] == "global":
+                candidate_relative = Path(*candidate_parts[1:])
+            else:
+                candidate_relative = relative_source
+            candidate = staging / "candidate" / candidate_relative
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(exported, candidate)
+
+            destinations: list[str] = []
             multiple_destinations = entry.get("destinations")
             if isinstance(multiple_destinations, list):
                 for mapped in multiple_destinations:
                     if isinstance(mapped, str):
-                        lines.append(
-                            f"- `{bundle_path}` → `~/{mapped}` "
-                            f"({entry.get('harness', 'shared')})"
-                        )
-                continue
-            explicit_destination = entry.get("destination")
-            if isinstance(explicit_destination, str):
-                relative = Path(explicit_destination)
+                        destinations.append(mapped)
             else:
-                parts = Path(bundle_path).parts
-                relative = Path(*parts[3:]) if len(parts) > 3 else Path("?")
+                explicit_destination = entry.get("destination")
+                if isinstance(explicit_destination, str):
+                    destinations.append(explicit_destination)
+                else:
+                    parts = Path(bundle_path).parts
+                    fallback = Path(*parts[3:]) if len(parts) > 3 else Path("?")
+                    destinations.append(str(fallback))
+
+            text = exported.read_text(errors="replace")[:1_000_000].lower()
+            flags: list[str] = []
+            lower_path = str(candidate_relative).lower()
+            if "/hooks/" in f"/{lower_path}/" or lower_path.endswith(".sh"):
+                flags.append("executable behavior")
+            if any(
+                part in lower_path for part in ("settings", "mcp-config", "config.")
+            ):
+                flags.append("active configuration")
+            policy_terms = [
+                term
+                for term in (
+                    "deny",
+                    "forbid",
+                    "must not",
+                    "never ",
+                    "ssh",
+                    "network",
+                    "workiq",
+                    "linkedin",
+                    "internal",
+                )
+                if term in text
+            ]
+            if policy_terms:
+                flags.append("review policy terms: " + ", ".join(policy_terms))
+            display = str(Path("candidate") / candidate_relative)
+            suffix = f" — **review: {'; '.join(flags)}**" if flags else ""
             lines.append(
-                f"- `{bundle_path}` → `~/{relative}` ({entry.get('harness', '?')})"
+                f"- `{display}` → "
+                + ", ".join(f"`~/{mapped}`" for mapped in destinations)
+                + suffix
             )
-        (staging / "IMPORT.md").write_text("\n".join(lines) + "\n")
+            candidate_records.append(
+                {
+                    "candidate": display,
+                    "source": bundle_path,
+                    "harness": entry.get("harness"),
+                    "destinations": destinations,
+                    "review_flags": flags,
+                }
+            )
+        handoff = staging / "HANDOFF.md"
+        handoff.write_text("\n".join(lines) + "\n")
         staged_manifest = {
             "schema": "agentsmith-global-import",
             "schema_version": 1,
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "source": "sources/001-" + source.name,
+            "source": "source",
+            "candidate": "candidate",
             "files": len(entries),
-            "instructions": "IMPORT.md",
+            "handoff": "HANDOFF.md",
+            "entries": candidate_records,
         }
         (staging / "manifest.json").write_text(
             json.dumps(staged_manifest, indent=2, ensure_ascii=False) + "\n"
@@ -427,4 +540,4 @@ def prepare_global_import(
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
-    return GlobalImportResult(root, len(entries))
+    return GlobalImportResult(root, root / "HANDOFF.md", len(entries))

@@ -84,7 +84,10 @@ and attributable memory are included by default (`--no-*` opts out) and remain
 namespaced per project root. Global instructions/settings/hooks/skills use the
 separate `export-global` / `import-global` lifecycle, so they are never duplicated
 into project bundles. Both inventories exclude authentication/session stores;
-imports stage configuration for review instead of installing it.
+global imports preserve verified `source/`, create an editable `candidate/`, and use
+the same `HANDOFF.md` convention as project imports. Candidate deletion is an
+explicit exclusion. The handoff requires critical policy/dependency review and user
+approval before a launched agent changes live configuration.
 
 Usage summaries are cached per session under `~/.cache/asmith/usage/`, keyed by
 the native artifacts' paths, mtimes, and sizes. Both usage and Claude index caches

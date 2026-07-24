@@ -23,6 +23,7 @@ from .backends import (
     select_backends,
 )
 from .continuation import (
+    global_launch_command,
     launch_command,
     prepare_continuation,
     prepare_global_import,
@@ -681,7 +682,18 @@ def cmd_import_global(args: argparse.Namespace) -> None:
             f"staged {result.files} global agent configuration file(s) at {result.root}"
         )
     )
-    print(f"review: {result.root / 'IMPORT.md'}")
+    print(f"handoff: {result.handoff}")
+    if args.launch:
+        if not args.to:
+            die("--launch requires --to copilot|claude|codex")
+        command = global_launch_command(result, args.to)
+        print(dim("launching: " + " ".join(command[:2]) + " …"), file=sys.stderr)
+        try:
+            completed = subprocess.run(command, cwd=Path.home(), check=False)
+        except FileNotFoundError:
+            die(f"destination CLI is not installed or not on PATH: {command[0]}")
+        if completed.returncode:
+            raise SystemExit(completed.returncode)
 
 
 def cmd_search(args: argparse.Namespace) -> None:
@@ -1638,8 +1650,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="stage a global agent configuration bundle for review",
         description=(
             "Prepare a global export on this machine without overwriting live "
-            "configuration. IMPORT.md maps every staged file to its user-home "
-            "destination."
+            "configuration. HANDOFF.md audits an editable candidate tree and maps "
+            "every retained file to its user-home destination."
         ),
     )
     sp.add_argument("bundle", help="global export DIRECTORY")
@@ -1647,6 +1659,16 @@ def build_parser() -> argparse.ArgumentParser:
         "-o",
         "--out",
         help="new staging DIRECTORY (default: XDG state directory)",
+    )
+    sp.add_argument(
+        "--to",
+        choices=("copilot", "claude", "codex"),
+        help="destination agent for --launch",
+    )
+    sp.add_argument(
+        "--launch",
+        action="store_true",
+        help="launch an agent to audit candidate files (approval required before apply)",
     )
     sp.set_defaults(func=cmd_import_global)
 

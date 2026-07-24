@@ -444,9 +444,12 @@ class BackendFixturesTest(unittest.TestCase):
             str(global_staging),
         )
         self.assertIn("staged", global_import.stdout)
-        import_instructions = (global_staging / "IMPORT.md").read_text()
+        import_instructions = (global_staging / "HANDOFF.md").read_text()
         self.assertIn("~/.claude/rules/shared.md", import_instructions)
         self.assertIn("~/.copilot/instructions/shared.md", import_instructions)
+        self.assertIn("explicit user exclusion", import_instructions)
+        self.assertTrue((global_staging / "candidate").is_dir())
+        self.assertTrue((global_staging / "source").is_dir())
 
         other = self.root / "other-work"
         other.mkdir()

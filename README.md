@@ -123,7 +123,7 @@ the full id).
 | `asmith export-global -o DIR` | Separately export user-wide instructions, hooks, skills, and settings for every agent (`-H` narrows it). |
 | `asmith verify <bundle>` | Verify the export schema, safe relative paths, sizes, and every SHA-256 checksum. |
 | `asmith import <source…> --to AGENT` | Prepare verified export bundle(s), raw JSONL/GZ dump(s), or native archive directories as a reviewable continuation. `--launch` starts the destination CLI in YOLO mode. |
-| `asmith import-global <bundle>` | Stage a global configuration export with an `IMPORT.md` destination map; never overwrite live configuration. |
+| `asmith import-global <bundle>` | Verify the source and create an editable `candidate/` tree plus a critical-review `HANDOFF.md`; never overwrite live configuration. |
 | `asmith merge [path] --to AGENT` | Normalize all live sessions for a directory into one prepared continuation without modifying the originals. |
 | `asmith search <query…>` | Literal-phrase search across sessions (Copilot FTS5; Claude/Codex scan), merged by recency. |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
@@ -220,14 +220,21 @@ asmith import old-claude.jsonl old-copilot.jsonl.gz --to claude -o ~/handoff
 asmith import old-session-archive/ --to codex --launch
 asmith merge ~/code/project --to codex --launch
 asmith import-global ~/exports/global-agent-config
+asmith import-global ~/exports/global-agent-config --to codex --launch
 ```
 
 Exports are preferred. Native Claude, Codex, and Copilot JSONL dumps are a recovery
 fallback; gzip transcripts and archive directories containing `events.jsonl(.gz)`
 are supported. Dumps can omit memory, child sessions, usage, and sidecars, and the
 importer reports those limitations. Project context remains attached to its source
-project namespace. `import-global` creates `IMPORT.md` mapping each file to its
-user-home destination; it never silently installs over live configuration.
+project namespace. `import-global` preserves the verified bundle under `source/`,
+copies visible files into an editable `candidate/`, and creates `HANDOFF.md` mapping
+each retained file to its user-home destination. Deleting a candidate explicitly
+excludes it; it is never silently restored or installed. The handoff flags hooks,
+active configuration, restrictive policy language, work/internal dependencies,
+SSH/network/tool limitations, and missing cross-file references. A launched agent
+must present a keep/adapt/omit plan and receive explicit approval before changing
+live configuration.
 
 The destination adapter starts a **new native session** with instructions to read
 the handoff. Agentsmith does not fabricate private JSONL/SQLite records. `merge`

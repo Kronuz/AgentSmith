@@ -137,10 +137,15 @@ Global agent configuration has a separate lifecycle:
 ```console
 $ asmith export-global -o ~/exports/my-agent-config
 $ asmith import-global ~/exports/my-agent-config
+$ asmith import-global ~/exports/my-agent-config --to codex --launch
 ```
 
 This prevents global hooks or instructions from being duplicated into every project
-bundle. Authentication stores are excluded, but settings can contain inline secrets.
+bundle. The import has an untouched `source/`, an editable `candidate/`, and a
+critical-review `HANDOFF.md`. Delete unwanted candidates before launching; deletion
+means exclusion. The agent must flag restrictive or work-specific policy, resolve
+references to omitted files, propose keep/adapt/omit, and ask before applying.
+Authentication stores are excluded, but settings can contain inline secrets.
 
 Prepare an export—or an old native dump—for another agent:
 

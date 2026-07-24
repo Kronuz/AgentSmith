@@ -506,8 +506,9 @@ def _global_bundle(backup: Path, destination: Path) -> dict[str, int]:
         "- `copilot/` maps to `~/.copilot/`\n\n"
         "- `shared/instructions/` is the canonical cross-agent instruction set\n"
         "- `adapters/codex/AGENTS.md` is its consolidated Codex form\n\n"
-        "Run `asmith import-global .` to create a conflict-safe review map. Files "
-        "are never silently installed over existing configuration.\n"
+        "Run `asmith import-global .` to create an editable candidate tree and "
+        "critical-review `HANDOFF.md`. Files are never silently installed over "
+        "existing configuration.\n"
     )
     manifest = {
         "schema": "agentsmith-global-export",
