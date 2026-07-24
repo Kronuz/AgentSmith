@@ -536,6 +536,19 @@ class BackendFixturesTest(unittest.TestCase):
             "Shell and scripting:",
         ):
             self.assertIn(heading, top_help.stdout)
+        saved_no_color = self.env.pop("NO_COLOR", None)
+        saved_python_colors = self.env.get("PYTHON_COLORS")
+        self.env["PYTHON_COLORS"] = "1"
+        try:
+            plain_help = self.run_cli("launch", "--help")
+        finally:
+            if saved_no_color is not None:
+                self.env["NO_COLOR"] = saved_no_color
+            if saved_python_colors is None:
+                self.env.pop("PYTHON_COLORS", None)
+            else:
+                self.env["PYTHON_COLORS"] = saved_python_colors
+        self.assertNotIn("\x1b", plain_help.stdout)
         old_launch = self.run_cli(
             "launch",
             str(global_staging),

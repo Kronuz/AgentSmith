@@ -1522,6 +1522,16 @@ class _CommandHelpFormatter(argparse.HelpFormatter):
         return "\n".join(lines)
 
 
+def _disable_argparse_color(parser: argparse.ArgumentParser) -> None:
+    """Keep help uniformly plain on Python versions with colored argparse output."""
+    if hasattr(parser, "color"):
+        setattr(parser, "color", False)  # noqa: B010 - Python 3.14 argparse option
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            for child in set(action.choices.values()):
+                _disable_argparse_color(child)
+
+
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -2141,6 +2151,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--aggressive", action="store_true", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_purge)
 
+    _disable_argparse_color(p)
     return p
 
 
