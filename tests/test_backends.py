@@ -528,27 +528,15 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertNotIn("==SUPPRESS==", top_help.stdout)
         self.assertNotIn("export-global", top_help.stdout)
         self.assertNotIn("import-global", top_help.stdout)
-        for heading in (
-            "Browse sessions:",
-            "Inspect and analyze:",
-            "Move and continue:",
-            "Manage data:",
-            "Shell and scripting:",
-        ):
-            self.assertIn(heading, top_help.stdout)
-        saved_no_color = self.env.pop("NO_COLOR", None)
-        saved_python_colors = self.env.get("PYTHON_COLORS")
-        self.env["PYTHON_COLORS"] = "1"
-        try:
-            plain_help = self.run_cli("launch", "--help")
-        finally:
-            if saved_no_color is not None:
-                self.env["NO_COLOR"] = saved_no_color
-            if saved_python_colors is None:
-                self.env.pop("PYTHON_COLORS", None)
-            else:
-                self.env["PYTHON_COLORS"] = saved_python_colors
-        self.assertNotIn("\x1b", plain_help.stdout)
+        ordered_commands = (
+            "    list (ls)",
+            "    show ",
+            "    export ",
+            "    redact ",
+            "    ids ",
+        )
+        positions = [top_help.stdout.index(command) for command in ordered_commands]
+        self.assertEqual(positions, sorted(positions))
         old_launch = self.run_cli(
             "launch",
             str(global_staging),

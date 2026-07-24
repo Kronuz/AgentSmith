@@ -11,10 +11,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, ClassVar, override
+from typing import Any
 
 from . import scan
 from .backends import (
@@ -1456,80 +1455,53 @@ def cmd_purge(args: argparse.Namespace) -> None:
 
 
 class _CommandHelpFormatter(argparse.HelpFormatter):
-    """Group commands by task and drop the redundant positional header."""
-
-    _groups = (
-        ("Browse sessions", ("list", "tree", "dirs", "find", "resolve", "recent")),
-        (
-            "Inspect and analyze",
-            (
-                "show",
-                "dump",
-                "search",
-                "grep",
-                "files",
-                "checkpoints",
-                "usage",
-                "path",
-                "stats",
-            ),
-        ),
-        ("Move and continue", ("export", "verify", "import", "merge", "launch")),
-        ("Manage data", ("redact", "rm", "purge")),
-        ("Shell and scripting", ("ids", "completion")),
-    )
-    _labels: ClassVar[dict[str, str]] = {
-        "list": "list (ls)",
-        "checkpoints": "checkpoints (cp)",
-        "rm": "rm (prune)",
-    }
+    """Use a wider option column while retaining argparse's native rendering."""
 
     def __init__(self, prog: str) -> None:
         super().__init__(prog, max_help_position=30)
 
-    @override
-    def _format_action(self, action: argparse.Action) -> str:
-        if action.nargs != argparse.PARSER:
-            return super()._format_action(action)
-        choices = list(getattr(action, "_choices_actions", []))
-        by_name = {
-            str(getattr(choice, "dest", "")).split(" ", 1)[0]: choice
-            for choice in choices
-        }
-        lines: list[str] = []
-        included: set[str] = set()
-        for title, names in self._groups:
-            available = [name for name in names if name in by_name]
-            if not available:
-                continue
-            lines.append(f"  {title}:")
-            for name in available:
-                choice = by_name[name]
-                label = self._labels.get(name, str(getattr(choice, "dest", name)))
-                help_text = str(getattr(choice, "help", "") or "")
-                wrapped = textwrap.wrap(help_text, width=52) or [""]
-                lines.append(f"    {label:<22}{wrapped[0]}")
-                lines.extend(f"    {'':22}{part}" for part in wrapped[1:])
-                included.add(name)
-            lines.append("")
-        remaining = [choice for name, choice in by_name.items() if name not in included]
-        if remaining:
-            lines.append("  Other:")
-            for choice in remaining:
-                label = str(getattr(choice, "dest", ""))
-                lines.append(f"    {label:<22}{getattr(choice, 'help', '')}")
-            lines.append("")
-        return "\n".join(lines)
 
-
-def _disable_argparse_color(parser: argparse.ArgumentParser) -> None:
-    """Keep help uniformly plain on Python versions with colored argparse output."""
-    if hasattr(parser, "color"):
-        setattr(parser, "color", False)  # noqa: B010 - Python 3.14 argparse option
+def _order_subcommand_help(parser: argparse.ArgumentParser) -> None:
+    """Order native argparse command help by task without synthetic group headings."""
+    order = (
+        "list",
+        "tree",
+        "dirs",
+        "find",
+        "resolve",
+        "recent",
+        "show",
+        "dump",
+        "search",
+        "grep",
+        "files",
+        "checkpoints",
+        "usage",
+        "path",
+        "stats",
+        "export",
+        "verify",
+        "import",
+        "merge",
+        "launch",
+        "redact",
+        "rm",
+        "purge",
+        "ids",
+        "completion",
+    )
+    ranks = {name: index for index, name in enumerate(order)}
     for action in parser._actions:
-        if isinstance(action, argparse._SubParsersAction):
-            for child in set(action.choices.values()):
-                _disable_argparse_color(child)
+        if not isinstance(action, argparse._SubParsersAction):
+            continue
+        choices = list(getattr(action, "_choices_actions", []))
+        choices.sort(
+            key=lambda choice: ranks.get(
+                str(getattr(choice, "dest", "")).split(" ", 1)[0],
+                len(ranks),
+            )
+        )
+        setattr(action, "_choices_actions", choices)  # noqa: B010 - argparse metadata
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2151,7 +2123,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--aggressive", action="store_true", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_purge)
 
-    _disable_argparse_color(p)
+    _order_subcommand_help(p)
     return p
 
 
