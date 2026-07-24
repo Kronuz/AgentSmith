@@ -519,6 +519,14 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertNotIn("==SUPPRESS==", top_help.stdout)
         self.assertNotIn("export-global", top_help.stdout)
         self.assertNotIn("import-global", top_help.stdout)
+        for heading in (
+            "Browse sessions:",
+            "Inspect and analyze:",
+            "Move and continue:",
+            "Manage data:",
+            "Shell and scripting:",
+        ):
+            self.assertIn(heading, top_help.stdout)
         old_launch = self.run_cli(
             "launch",
             str(global_staging),
@@ -614,6 +622,19 @@ class BackendFixturesTest(unittest.TestCase):
             ).is_file()
         )
 
+        selected = self.root / "merged-selected"
+        selected_result = self.run_cli(
+            "merge",
+            "11111111",
+            "33333333",
+            "-o",
+            str(selected),
+        )
+        self.assertIn("merged 2 session(s)", selected_result.stdout)
+        selected_handoff = (selected / "HANDOFF.md").read_text()
+        self.assertIn("copilot fixture", selected_handoff)
+        self.assertIn("codex parent", selected_handoff)
+
     def test_search_uses_literal_phrase_across_backends(self) -> None:
         result = self.run_cli("search", "hello", "there", "-n", "10")
         self.assertIn("11111111", result.stdout)
@@ -669,6 +690,38 @@ class BackendFixturesTest(unittest.TestCase):
             list(Path(self.env["CODEX_SESSIONS"]).glob("*.jsonl")),
             [],
         )
+
+    def test_rm_path_is_exact_unless_recursive(self) -> None:
+        nested = self.cwd / "nested"
+        nested.mkdir()
+        nested_id = "66666666-6666-6666-6666-666666666666"
+        _jsonl(
+            Path(self.env["CLAUDE_HOME"])
+            / "projects"
+            / "nested"
+            / f"{nested_id}.jsonl",
+            [
+                {
+                    "type": "user",
+                    "cwd": str(nested),
+                    "timestamp": "2026-01-04T00:00:00Z",
+                    "message": {"content": "nested project"},
+                }
+            ],
+        )
+        exact = self.run_cli("rm", "-H", "claude", "--dry-run", str(self.cwd))
+        self.assertIn("1 would be shredded", exact.stdout)
+        self.assertNotIn("66666666", exact.stdout)
+        recursive = self.run_cli(
+            "rm",
+            "-H",
+            "claude",
+            "--dry-run",
+            "--recursive",
+            str(self.cwd),
+        )
+        self.assertIn("2 would be shredded", recursive.stdout)
+        self.assertIn("66666666", recursive.stdout)
 
 
 if __name__ == "__main__":

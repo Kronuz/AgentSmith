@@ -13,6 +13,25 @@ If you haven't yet, add this to your shell rc and open a new shell:
 That gives you `asmith`, the `copilot()` / `claude()` / `codex()` auto-resume
 wrappers, and tab completion. Rows are tagged `co`, `cl`, or `cx`.
 
+Choose the workflow that matches what you have:
+
+| You have… | Prepare with… | Then… |
+| --- | --- | --- |
+| Live sessions for one or more projects | `asmith merge TARGET… -o PREPARED` | Review and `asmith launch AGENT HANDOFF` |
+| Export bundles or old native dumps | `asmith import SOURCE… -o PREPARED` | Review and `asmith launch AGENT HANDOFF` |
+| One session to read or extract | `asmith dump SESSION` | Pipe, render, or use `--raw` |
+| Sessions to move between machines | `asmith export TARGET… -o BUNDLE` | Copy, `verify`, then `import` |
+| Global instructions/configuration | `asmith export --global -o BUNDLE` | `import`, audit `candidate/`, then `launch` |
+| Any standalone plan or handoff document | Nothing | `asmith launch AGENT FILE --cwd PROJECT` |
+
+The transfer pipeline is intentionally agent-neutral until the final step:
+
+```text
+live sessions ── merge ──┐
+                         ├── PREPARED/HANDOFF.md ── launch AGENT
+bundles/dumps ─ import ──┘
+```
+
 ---
 
 ## 1. The five you'll use daily
@@ -25,8 +44,10 @@ $ asmith resume            # reopen the newest resumable session for this dir
 $ asmith dump <id>         # read a whole conversation
 ```
 
-Anywhere you see `<id>` you can pass a full id, a **unique prefix** (`413fc324`),
-or a **path** (`.`, `~/code/foo`) that resolves to the newest session there.
+Anywhere you see `<id>` you can pass a full id or a **unique id prefix**
+(`413fc324`). A prefix is not a wildcard: Agentsmith refuses it if more than one
+session matches. Commands that document a path also accept `.`, `~/code/foo`, and
+other filesystem paths.
 
 ---
 
@@ -131,7 +152,7 @@ archives and cross-agent continuation, use the export/import workflow next.
 
 ---
 
-## 4. Exporting and importing
+## 4. Moving and continuing work
 
 Agentsmith has two deliberately separate scopes:
 
@@ -142,6 +163,17 @@ Agentsmith has two deliberately separate scopes:
 Both are checksummed exports. Import never fabricates records in an agent's private
 database: it prepares a visible `HANDOFF.md`, and a destination agent creates a new
 native session or critically merges configuration.
+
+The nouns matter:
+
+- `TARGET` is a live session id, unique id prefix, or project path selected by
+  `export`/`merge`. Path selection is exact unless `--recursive` is explicit.
+- `BUNDLE` is a checksummed, immutable Agentsmith export.
+- `SOURCE` is an existing bundle, dump, compressed dump, or archive consumed by
+  `import`.
+- `PREPARED` is the reviewable directory produced by `import` or `merge`.
+- `HANDOFF` is either that prepared directory, its `HANDOFF.md`, or any standalone
+  document accepted by `launch`.
 
 ### Export one session
 
@@ -252,6 +284,35 @@ $ asmith launch codex ~/imports/merged/HANDOFF.md
 archive directories. `merge` starts from a live project path, discovers every current
 Claude/Codex/Copilot session associated with it, and feeds a temporary export through
 the same normalization pipeline. It leaves every original session untouched.
+
+`merge` also accepts several live targets, including individual sessions:
+
+```console
+$ asmith merge ~/code/api ~/code/frontend 10b72094 \
+    --cwd ~/code/workspace -o ~/imports/combined-live-work
+```
+
+Sessions selected more than once are deduplicated. If selected sessions span several
+working directories and `--cwd` is omitted, the handoff defaults to your current
+directory and prints a warning.
+
+### Launch any handoff
+
+The exact `HANDOFF.md` printed by `import` or `merge` is directly launchable:
+
+```console
+$ asmith launch codex ~/imports/combined/HANDOFF.md
+$ asmith launch claude ~/imports/combined
+```
+
+`launch` is also useful without import/export:
+
+```console
+$ asmith launch copilot ./NEXT_STEPS.md --cwd ~/code/project
+```
+
+Prepared continuations carry their workspace in `manifest.json`; `--cwd` overrides
+it. A standalone file uses the current directory unless `--cwd` is supplied.
 
 ### Export global agent configuration
 
@@ -423,7 +484,8 @@ shred co 386cd898  Reply with exactly: STDIN=…
 
 $ asmith rm 386cd898 111b6b0f -y       # shred two, skip the confirm
 $ asmith rm 10b72094 -v                # list every path touched
-$ asmith rm ~/code/oldproject          # every session under a directory (and below)
+$ asmith rm ~/code/oldproject          # sessions with this exact cwd
+$ asmith rm ~/code/oldproject --recursive # also nested project directories
 ```
 
 By default it won't edit **other** sessions' transcripts even if they mention the
@@ -435,8 +497,9 @@ files, and says so at the prompt):
 $ asmith rm 10b72094 --aggressive --dry-run
 ```
 
-Guards: `asmith rm` refuses the session you're currently in (skips it in bulk) and
-always confirms unless you pass `-y`.
+Guards: id prefixes must resolve uniquely; project paths are exact unless
+`--recursive` is explicit; `asmith rm` refuses the session you're currently in
+(skips it in bulk) and always confirms unless you pass `-y`.
 
 **Purge the dead weight.** The store fills up with empty shells — sessions with no
 transcript and 0 turns that can't be resumed or read. Clear them all at once:
@@ -495,6 +558,7 @@ owns the id automatically — you never qualify it.
 | Export a session/project | `asmith export <id/PROJECT…> -o BUNDLE` |
 | Export globals | `asmith export --global -o BUNDLE` (or target an agent home) |
 | Prepare an import | `asmith import SOURCE -o PREPARED` |
+| Combine live session/project targets | `asmith merge TARGET… -o PREPARED` |
 | Launch a handoff | `asmith launch AGENT HANDOFF` |
 | Find which session discussed X | `asmith search <words>` |
 | Grep transcripts | `asmith grep <regex> [id]` |

@@ -116,14 +116,14 @@ the full id).
 | `asmith tree` | Sessions grouped **by directory** (or `--by agent`), each as a one-liner. `-S/--sort`, `-r`, `--resumable`. |
 | `asmith dirs` | Directories that have sessions (columns explained in `asmith dirs --help`). `--by-count`. |
 | `asmith find [dir]` | Sessions for a directory. `-1` prints the newest id; `--with-harness`, `--resumable`, `--exact`. |
-| `asmith resolve [id/prefix/path]` | Print the **full** session id for a short hash/prefix/dir (`--resumable`, `--with-harness`). |
+| `asmith resolve [id/prefix/path]` | Resolve a unique id prefix or path to one **full** session id (`--resumable`, `--with-harness`). |
 | `asmith show <session>` | Metadata: cwd, repo/branch, times, turns, files, tokens/AIU, checkpoints, resume line. |
 | `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
 | `asmith export [TARGET…] -o BUNDLE` | Export sessions/projects, defaulting to the current project. An exact agent-home target such as `~/.codex` exports that agent's globals; `--global` exports all globals. |
 | `asmith verify <bundle>` | Verify the export schema, safe relative paths, sizes, and every SHA-256 checksum. |
 | `asmith import SOURCE… [-o PREPARED]` | Build an agent-neutral handoff from existing bundles/dumps. Global imports create an editable `candidate/` and critical-review `HANDOFF.md`. |
 | `asmith launch AGENT HANDOFF` | Launch an agent with a prepared directory, its printed `HANDOFF.md`, or any standalone handoff file. `--cwd` selects the workspace. |
-| `asmith merge [PROJECT] [-o PREPARED]` | Discover and normalize all live sessions for a project into one agent-neutral handoff without modifying the originals. |
+| `asmith merge [TARGET…] [-o PREPARED]` | Discover and normalize live sessions selected by project paths or unique ids/prefixes into one agent-neutral handoff. |
 | `asmith search <query…>` | Literal-phrase search across sessions (Copilot FTS5; Claude/Codex scan), merged by recency. |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
 | `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under all harness homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
@@ -133,12 +133,214 @@ the full id).
 | `asmith recent [-n N]` | Most recent sessions across all directories. |
 | `asmith path [session]` | Print the on-disk location (default: session for cwd). |
 | `asmith stats` | Per-harness totals (sessions, resumable, dirs, span). `--usage` adds AIU. |
-| `asmith rm <id/path…>` (`prune`) | **Shred local state** for session(s). Takes ids/prefixes **or a path** (all sessions under it). `-y`, `--dry-run`, `-v`, `--aggressive`. |
+| `asmith rm <id/path…>` (`prune`) | **Shred local state** for session(s). Path targets are exact unless `--recursive` is explicit. `-y`, `--dry-run`, `-v`, `--aggressive`. |
 | `asmith purge` | Shred all **empty** sessions (no transcript, 0 turns). `-y`, `--dry-run`, `-v`, `-H`. |
-| `asmith resume [-H h] [target]` | Resume a session — `target` is a **dir** (default: cwd) *or* an **id/prefix** (shell; launches the right CLI). |
+| `asmith resume [-H h] [target]` | Resume a session—`target` is a directory (default cwd), full id, or unique id prefix (shell; launches the right CLI). |
 | `asmith cd [session]` | `cd` into a session's on-disk location (shell). |
 | `asmith ids` | Print session ids, one per line (scripting / completion). `--full` for full uuids. |
 | `asmith completion <bash\|zsh>` | Print the tab-completion script for your shell. |
+
+## Complete option reference
+
+Every command supports `-h/--help`. Commands that read agent stores also support
+`-H/--harness copilot|claude|codex|all` (default `all`) and `--no-color`.
+`SESSION`/`TARGET` accepts a full id, a **unique id prefix**, or a path where
+documented. A prefix is never a wildcard: Agentsmith rejects it if zero or multiple
+sessions match. Paths are exact for `export`, `merge`, and `rm` unless the command's
+explicit `--recursive` option is supplied.
+
+### Browse sessions
+
+`asmith list` / `asmith ls`
+
+- `-d/--dir TEXT`: cwd substring filter.
+- `--here`: exact current-directory sessions.
+- `--repo TEXT`: repository substring filter.
+- `-g/--grep TEXT`: name or cwd substring filter.
+- `-S/--sort date|agent|id|turns|name|dir`: sort key; date is default.
+- `-r/--reverse`: reverse the selected order.
+- `-n/--number N`: maximum rows; omitted means all.
+
+```sh
+asmith ls --here -S turns -r
+asmith ls -H codex -g agentsmith -n 20
+```
+
+`asmith tree`
+
+- `--by dir|agent`: group by directory (default) or agent.
+- `--resumable`: exclude sessions that cannot be reopened.
+- `-S/--sort`, `-r/--reverse`, `-n/--number`: same meanings as `list`.
+
+`asmith dirs`
+
+- `--by-count`: rank directories by session count instead of recency.
+- `-n/--number N`: maximum directories; omitted means all.
+
+`asmith find [DIR]`
+
+- `-1/--one`: print only the newest matching id.
+- `--with-harness`: with `--one`, print `harness<TAB>id`.
+- `--resumable`: require an on-disk resumable session.
+- `--exact`: match only the exact cwd; otherwise nested paths may match.
+
+`asmith resolve [TARGET]`
+
+- `--resumable`: require a resumable result.
+- `--with-harness`: print `harness<TAB>id`.
+- `--exact`: exact cwd matching for path targets.
+
+`asmith recent`
+
+- `-S/--sort`, `-r/--reverse`: choose and reverse the sort.
+- `-n/--number N`: maximum sessions; default 15.
+
+### Inspect and analyze
+
+`asmith show SESSION` has no command-specific options. It reports identity, cwd,
+repository, timestamps, turns, usage, files, checkpoints, and the native resume line.
+
+`asmith dump SESSION`
+
+- `-t/--tools`: include full tool arguments and results.
+- `-R/--reasoning`: include recorded reasoning text.
+- `--user-only` / `--assistant-only`: select one speaker.
+- `--no-subagents`: omit distinguishable child-agent turns.
+- `--md`: render Markdown instead of terminal chat.
+- `--color`: retain ANSI color even when redirected.
+- `--raw`: emit one underlying native transcript byte-for-byte.
+- `-o/--out FILE`: write to a file; with `--raw`, copy the native transcript.
+
+`asmith search QUERY…`
+
+- `-n/--number N`: maximum cross-agent literal-phrase hits; default 20.
+
+`asmith grep REGEX [SESSION]`
+
+- `-s/--case-sensitive`: disable the default case-insensitive matching.
+- `-m/--max-count N`: stop after N transcript matches; `0` means all.
+
+`asmith files SESSION`
+
+- `--main-only`: exclude file touches attributed to distinguishable subagents.
+
+`asmith checkpoints SESSION` / `asmith cp SESSION`
+
+- `-v/--verbose`: include checkpoint next steps. Checkpoints are currently native
+  to Copilot sessions.
+
+`asmith usage [SESSION]`
+
+- `--main-only`: exclude distinguishable subagents.
+- `-n/--number N`: leaderboard size when no session is supplied; default 15.
+
+With a session, usage is split by model and fresh input/output/cache/reasoning.
+Without one, it shows the cross-agent weighted-token-count leaderboard.
+
+`asmith path [SESSION]` prints the native on-disk artifact path; it defaults to the
+newest session for the current directory.
+
+`asmith stats`
+
+- `--usage`: also aggregate AIU usage; slower because transcripts must be parsed.
+
+### Move and continue
+
+`asmith export [TARGET…] -o BUNDLE`
+
+- With no target, export sessions for the current project.
+- A target may be a full session id, unique id prefix, or project path.
+- An exact agent home (`~/.codex`, `~/.claude`, `~/.copilot`) selects that agent's
+  global configuration.
+- `--global`: export global configuration for all selected harnesses.
+- `--recursive`: include sessions whose cwd is nested below a path target.
+- `--no-memory`: omit attributable project memory.
+- `--no-project-context`: omit project instructions, hooks, settings, and skills.
+- `-o/--out BUNDLE`: required new destination; it must not already exist.
+
+```sh
+asmith export -o ~/exports/current
+asmith export 10b72094 ~/code/other -o ~/exports/selected
+asmith export --global -o ~/exports/globals
+```
+
+`asmith verify BUNDLE` validates schema, safe paths, sizes, and every SHA-256 checksum.
+
+`asmith import SOURCE… [-o PREPARED]`
+
+- Accepts one or more Agentsmith bundles, native `.jsonl`/`.jsonl.gz` dumps, or
+  archive directories. Multiple sources become one handoff.
+- `--from copilot|claude|codex`: resolve an ambiguous native dump dialect.
+- `--cwd PROJECT`: workspace recorded in a project/session handoff; default current
+  directory.
+- `--global`: explicitly require global-configuration import mode; normally inferred
+  from the bundle schema.
+- `-o/--out PREPARED`: new review directory; otherwise use the XDG state directory.
+
+`asmith merge [TARGET…] [-o PREPARED]`
+
+- Discovers live sessions; unlike `import`, it does not consume dump/bundle sources.
+- Each target may be a live full session id, unique id prefix, or project path;
+  default current project.
+- Multiple targets are combined chronologically and deduplicated.
+- `--recursive`: for path targets, include sessions in nested project directories.
+- `--cwd PROJECT`: workspace for the resulting handoff. When all sessions share one
+  cwd it is inferred; mixed cwd selections otherwise use the current directory.
+- `--no-memory` / `--no-project-context`: omit those exported inputs.
+- `-o/--out PREPARED`: new review directory; otherwise use the XDG state directory.
+
+```sh
+asmith merge . -o ~/imports/current-history
+asmith merge ~/code/api ~/code/web 10b72094 \
+  --cwd ~/code/workspace -o ~/imports/combined
+```
+
+`asmith launch AGENT HANDOFF`
+
+- `AGENT`: `copilot`, `claude`, or `codex`.
+- `HANDOFF`: prepared directory, its `HANDOFF.md`, or any standalone document.
+- `--cwd PROJECT`: workspace for standalone files or an override for a prepared
+  continuation.
+
+Launch uses the selected CLI's YOLO mode and starts a new native session; it never
+fabricates private session-store records.
+
+### Manage data
+
+`asmith redact PATTERN`
+
+- Literal matching by default; `--regex` enables regular expressions.
+- `-i/--ignore-case`: case-insensitive matching.
+- `--mask CHAR`: replacement character, repeated to the matched length; default `*`.
+- `--dry-run`: report only; never modify.
+- `-y/--yes`: skip confirmation.
+- `-v/--verbose`: list every match; `-q/--quiet`: totals/results only.
+- `--show-secret`: reveal matches instead of masking terminal output.
+- `--max-bytes N`: skip files larger than N; `0` means unlimited.
+- `-m/--max-count N`: dry-run match limit; ignored during real redaction so a secret
+  is never partially scrubbed.
+
+`asmith rm SESSION…` / `asmith prune SESSION…`
+
+- Accepts full ids, unique id prefixes, or exact project paths.
+- `--recursive`: for path targets, also select sessions in nested directories.
+- `--dry-run`: inventory without deleting.
+- `-y/--yes`: skip confirmation.
+- `-v/--verbose`: list every touched path.
+- `--aggressive`: also scrub the removed id from other sessions' transcripts/memory.
+
+`asmith purge`
+
+- Selects only empty session shells: no transcript and zero turns.
+- `--dry-run`, `-y/--yes`, and `-v/--verbose` match `rm`.
+
+### Shell and scripting
+
+`asmith ids [--full]` prints short ids by default; `--full` prints full UUIDs.
+
+`asmith completion bash|zsh` prints the completion program to source from the shell.
+The sourced `agentsmith.sh` also provides `asmith resume` and `asmith cd`, which must
+run in the calling shell to launch interactively or change its directory.
 
 ## The agent wrappers
 
@@ -280,16 +482,19 @@ Verified by a sandbox that plants the id in every table and vestige location: af
 one `rm` (or `purge`) there are **zero** id-named files, **zero** content
 references, and **zero** DB rows left, while other sessions stay intact.
 
-`asmith rm` takes **ids, unique prefixes, or a path** — a path expands to *every*
-session for that directory and below (great for wiping a whole project). It
-refuses the current live session (skips it in bulk), confirms unless `-y`, and
-previews everything with `--dry-run` (`-v` to list every path).
+`asmith rm` takes **full ids, unique id prefixes, or exact project paths**. An id
+prefix must identify exactly one session and is rejected when ambiguous. A path
+selects only sessions whose cwd exactly matches it; add `--recursive` to include
+nested project directories. It refuses the current live session (skips it in bulk),
+confirms unless `-y`, and previews everything with `--dry-run` (`-v` to list every
+path).
 
 ```sh
 asmith rm 386cd898 --dry-run          # preview the shred
 asmith rm 386cd898 111b6b0f -y        # shred two, no confirmation
 asmith rm 10b72094 --aggressive -v    # also scrub cross-references, list everything
-asmith rm ~/code/oldproject --dry-run # every session under a directory
+asmith rm ~/code/oldproject --dry-run # exact cwd only
+asmith rm ~/code/oldproject --recursive --dry-run # exact cwd + nested projects
 ```
 
 ## Purging empty sessions (`asmith purge`)

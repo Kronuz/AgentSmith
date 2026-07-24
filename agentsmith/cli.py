@@ -11,9 +11,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, override
+from typing import Any, ClassVar, override
 
 from . import scan
 from .backends import (
@@ -622,10 +623,31 @@ def cmd_export_global(args: argparse.Namespace) -> None:
 
 
 def cmd_merge(args: argparse.Namespace) -> None:
-    """Normalize every matching live session into one prepared continuation."""
+    """Normalize matching live sessions into one prepared continuation."""
     backends = select_backends(args.harness)
-    pairs, project_root = _export_pairs(backends, args.path, args.recursive)
-    cwd = Path(args.cwd or project_root or args.path).expanduser().resolve()
+    targets: list[str] = args.targets or ["."]
+    pairs: list[tuple[Backend, Session]] = []
+    project_roots: list[Path] = []
+    seen_sessions: set[tuple[str, str]] = set()
+    seen_roots: set[Path] = set()
+    for target in targets:
+        target_pairs, project_root = _export_pairs(backends, target, args.recursive)
+        for pair in target_pairs:
+            key = (pair[0].name, pair[1].id)
+            if key not in seen_sessions:
+                seen_sessions.add(key)
+                pairs.append(pair)
+        if project_root:
+            resolved_root = project_root.expanduser().resolve()
+            if resolved_root not in seen_roots:
+                seen_roots.add(resolved_root)
+                project_roots.append(resolved_root)
+    pairs.sort(key=lambda pair: parse_ts(pair[1].updated_at))
+    session_cwds = {
+        Path(pair[1].cwd).expanduser().resolve() for pair in pairs if pair[1].cwd
+    }
+    inferred_cwd = next(iter(session_cwds)) if len(session_cwds) == 1 else Path.cwd()
+    cwd = Path(args.cwd).expanduser().resolve() if args.cwd else inferred_cwd
     if not cwd.is_dir():
         die(f"working directory does not exist: {cwd}")
     with tempfile.TemporaryDirectory(prefix="asmith-merge-") as temporary:
@@ -634,10 +656,10 @@ def cmd_merge(args: argparse.Namespace) -> None:
             export_bundle(
                 _export_items(pairs),
                 bundle,
-                target=args.path,
+                target=targets,
                 include_memory=args.include_memory,
                 include_project_context=args.include_project_context,
-                project_roots=[project_root] if project_root else [],
+                project_roots=project_roots,
                 recursive=args.recursive,
             )
             result = prepare_continuation(
@@ -651,6 +673,14 @@ def cmd_merge(args: argparse.Namespace) -> None:
         green(f"merged {result.sessions} session(s) into continuation at {result.root}")
     )
     _print_handoff(result.handoff)
+    if len(session_cwds) > 1 and not args.cwd:
+        print(
+            yellow(
+                "warning: merged sessions span multiple working directories; "
+                f"handoff cwd defaults to {cwd} (override with --cwd)"
+            ),
+            file=sys.stderr,
+        )
     for warning in result.warnings:
         print(yellow(f"warning: {warning}"), file=sys.stderr)
 
@@ -1298,9 +1328,9 @@ def _print_report(rep: PurgeReport, verbose: bool) -> None:
 
 
 def _sessions_for_path(
-    backends: list[Backend], arg: str
+    backends: list[Backend], arg: str, *, recursive: bool
 ) -> list[tuple[Backend, Session]]:
-    """All sessions whose cwd is ``arg`` or nested beneath it."""
+    """Sessions whose cwd is ``arg``, optionally including descendants."""
     root = real(arg if arg not in (".", "./") else os.getcwd())
     prefix = root.rstrip(os.sep) + os.sep
     out: list[tuple[Backend, Session]] = []
@@ -1309,7 +1339,7 @@ def _sessions_for_path(
             if not s.cwd:
                 continue
             c = real(s.cwd)
-            if c == root or c.startswith(prefix):
+            if c == root or (recursive and c.startswith(prefix)):
                 out.append((b, s))
     return out
 
@@ -1380,7 +1410,7 @@ def cmd_rm(args: argparse.Namespace) -> None:
 
     for token in args.sessions:
         if looks_like_path(token):
-            matched = _sessions_for_path(backends, token)
+            matched = _sessions_for_path(backends, token, recursive=args.recursive)
             if not matched:
                 die(f"no sessions for path: {real(token)}")
             for pair in matched:
@@ -1422,17 +1452,70 @@ def cmd_purge(args: argparse.Namespace) -> None:
 
 
 class _CommandHelpFormatter(argparse.HelpFormatter):
-    """Drop the redundant '<command>' metavar header above the subcommand list."""
+    """Group commands by task and drop the redundant positional header."""
+
+    _groups = (
+        ("Browse sessions", ("list", "tree", "dirs", "find", "resolve", "recent")),
+        (
+            "Inspect and analyze",
+            (
+                "show",
+                "dump",
+                "search",
+                "grep",
+                "files",
+                "checkpoints",
+                "usage",
+                "path",
+                "stats",
+            ),
+        ),
+        ("Move and continue", ("export", "verify", "import", "merge", "launch")),
+        ("Manage data", ("redact", "rm", "purge")),
+        ("Shell and scripting", ("ids", "completion")),
+    )
+    _labels: ClassVar[dict[str, str]] = {
+        "list": "list (ls)",
+        "checkpoints": "checkpoints (cp)",
+        "rm": "rm (prune)",
+    }
 
     def __init__(self, prog: str) -> None:
         super().__init__(prog, max_help_position=30)
 
     @override
     def _format_action(self, action: argparse.Action) -> str:
-        text = super()._format_action(action)
-        if action.nargs == argparse.PARSER:
-            text = "\n".join(text.split("\n")[1:])
-        return text
+        if action.nargs != argparse.PARSER:
+            return super()._format_action(action)
+        choices = list(getattr(action, "_choices_actions", []))
+        by_name = {
+            str(getattr(choice, "dest", "")).split(" ", 1)[0]: choice
+            for choice in choices
+        }
+        lines: list[str] = []
+        included: set[str] = set()
+        for title, names in self._groups:
+            available = [name for name in names if name in by_name]
+            if not available:
+                continue
+            lines.append(f"  {title}:")
+            for name in available:
+                choice = by_name[name]
+                label = self._labels.get(name, str(getattr(choice, "dest", name)))
+                help_text = str(getattr(choice, "help", "") or "")
+                wrapped = textwrap.wrap(help_text, width=52) or [""]
+                lines.append(f"    {label:<22}{wrapped[0]}")
+                lines.extend(f"    {'':22}{part}" for part in wrapped[1:])
+                included.add(name)
+            lines.append("")
+        remaining = [choice for name, choice in by_name.items() if name not in included]
+        if remaining:
+            lines.append("  Other:")
+            for choice in remaining:
+                label = str(getattr(choice, "dest", ""))
+                lines.append(f"    {label:<22}{getattr(choice, 'help', '')}")
+            lines.append("")
+        return "\n".join(lines)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1560,14 +1643,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser(
         "resolve",
         parents=[common],
-        help="resolve an id/prefix/path to a full session id",
+        help="resolve a unique id prefix or path to a full session id",
     )
     _mark(
         sp.add_argument(
             "target",
             nargs="?",
             default=".",
-            help="id / prefix / path / . (default: cwd)",
+            help="full id / unique id prefix / path / . (default: cwd)",
         ),
         "both",
     )
@@ -1583,7 +1666,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_resolve)
 
     sp = sub.add_parser("show", parents=[common], help="show session metadata")
-    _mark(sp.add_argument("session", help="id / prefix / path / ."), "ids")
+    _mark(
+        sp.add_argument("session", help="full id / unique id prefix / path / ."),
+        "ids",
+    )
     sp.set_defaults(func=cmd_show)
 
     sp = sub.add_parser(
@@ -1591,7 +1677,10 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[common],
         help="dump one session's conversation (a path selects the newest)",
     )
-    _mark(sp.add_argument("session", help="id / prefix / path / ."), "ids")
+    _mark(
+        sp.add_argument("session", help="full id / unique id prefix / path / ."),
+        "ids",
+    )
     sp.add_argument(
         "-t", "--tools", action="store_true", help="include tool args + results"
     )
@@ -1632,7 +1721,7 @@ def build_parser() -> argparse.ArgumentParser:
             "targets",
             nargs="*",
             metavar="TARGET",
-            help="session id/prefix, project path, or exact agent-home path",
+            help="full session id, unique id prefix, project path, or exact agent home",
         ),
         "both",
     )
@@ -1770,7 +1859,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser(
         "merge",
         parents=[common],
-        help="merge a directory's live sessions into one prepared continuation",
+        help="combine live session/project targets into one prepared handoff",
         description=(
             "Discover every live session pointing at a project directory, export them "
             "temporarily, and normalize them chronologically into one agent-neutral "
@@ -1779,12 +1868,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _mark(
         sp.add_argument(
-            "path",
-            nargs="?",
-            default=".",
-            help="session working directory (default: current directory)",
+            "targets",
+            nargs="*",
+            metavar="TARGET",
+            help="full session id, unique id prefix, or project path (default: cwd)",
         ),
-        "dirs",
+        "both",
     )
     sp.add_argument(
         "--cwd",
@@ -1837,7 +1926,10 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[common],
         help="file touches recorded or inferred from session tool calls",
     )
-    _mark(sp.add_argument("session", help="id / prefix / path / ."), "ids")
+    _mark(
+        sp.add_argument("session", help="full id / unique id prefix / path / ."),
+        "ids",
+    )
     sp.add_argument(
         "--main-only", action="store_true", help="exclude distinguishable subagents"
     )
@@ -1846,7 +1938,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser(
         "checkpoints", aliases=["cp"], parents=[common], help="checkpoints"
     )
-    _mark(sp.add_argument("session", help="id / prefix / path / ."), "ids")
+    _mark(
+        sp.add_argument("session", help="full id / unique id prefix / path / ."),
+        "ids",
+    )
     sp.add_argument("-v", "--verbose", action="store_true", help="include next steps")
     sp.set_defaults(func=cmd_checkpoints)
 
@@ -1868,7 +1963,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _mark(
         sp.add_argument(
-            "session", nargs="?", help="id / prefix / path / . (omit for leaderboard)"
+            "session",
+            nargs="?",
+            help="full id / unique id prefix / path / . (omit for leaderboard)",
         ),
         "ids",
     )
@@ -1909,7 +2006,7 @@ def build_parser() -> argparse.ArgumentParser:
             "session",
             nargs="?",
             default=".",
-            help="id / prefix / path / . (default: cwd)",
+            help="full id / unique id prefix / path / . (default: cwd)",
         ),
         "both",
     )
@@ -2006,13 +2103,17 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument(
             "sessions",
             nargs="+",
-            help="id(s), unique prefix(es), or path(s) (a path removes every session "
-            "for that directory and below)",
+            help="full id(s), unique id prefix(es), or exact project path(s)",
         ),
         "both",
     )
     sp.add_argument("-y", "--yes", action="store_true", help="skip confirmation")
     sp.add_argument("--dry-run", action="store_true", help="show what would be removed")
+    sp.add_argument(
+        "--recursive",
+        action="store_true",
+        help="for path targets, also remove sessions in nested directories",
+    )
     sp.add_argument(
         "-v", "--verbose", action="store_true", help="list every path touched"
     )
