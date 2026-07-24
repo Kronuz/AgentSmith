@@ -339,9 +339,13 @@ class CodexBackend(Backend):
                 model, {"calls": 0, "i": 0, "o": 0, "cr": 0, "cw": 0, "r": 0}
             )
             row["calls"] += 1
-            row["i"] += int(usage.get("input_tokens", 0) or 0)
+            total_input = int(usage.get("input_tokens", 0) or 0)
+            cached_input = int(usage.get("cached_input_tokens", 0) or 0)
+            # OpenAI reports cached input as a subset of input_tokens. UsageRow
+            # keeps fresh input and cache reads disjoint across backends.
+            row["i"] += max(0, total_input - cached_input)
             row["o"] += int(usage.get("output_tokens", 0) or 0)
-            row["cr"] += int(usage.get("cached_input_tokens", 0) or 0)
+            row["cr"] += cached_input
             row["cw"] += int(usage.get("cache_write_input_tokens", 0) or 0)
             row["r"] += int(usage.get("reasoning_output_tokens", 0) or 0)
         return [
@@ -392,7 +396,8 @@ class CodexBackend(Backend):
 
     @override
     def state_location(self, session_id: str) -> Path | None:
-        return self.raw_path(session_id)
+        path = self.raw_path(session_id)
+        return path.parent if path is not None else None
 
     @override
     def remove(

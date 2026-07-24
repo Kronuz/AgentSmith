@@ -10,7 +10,6 @@ from typing import Any
 
 from .model import PurgeReport
 
-
 # Line-oriented files we scrub line-by-line (they mix many sessions).
 _LINE_EXTS = {".jsonl", ".ndjson", ".log"}
 # With --aggressive we also scrub these text formats (memory notes, prose logs).

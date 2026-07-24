@@ -22,7 +22,7 @@ class Session:
 
 
 class Msg:
-    __slots__ = ("role", "text", "tools", "reasoning", "agent")
+    __slots__ = ("agent", "reasoning", "role", "text", "tools")
 
     def __init__(self, role: str, text: str, agent: str | None = None) -> None:
         self.role = role
@@ -47,7 +47,7 @@ class SearchHit:
     snippet: str
 
 
-CACHE_READ_WEIGHT = 0.1  # cached input ≈ 10% the price of fresh input (both vendors)
+CACHE_READ_WEIGHT = 0.1  # deliberately model-agnostic estimate; see `usage --help`
 
 
 @dataclass
@@ -63,12 +63,10 @@ class UsageRow:
 
     @property
     def effective(self) -> float:
-        """Cost-weighted token proxy, comparable across harnesses.
+        """Simple weighted-token estimate over normalized, disjoint categories.
 
-        Built only from token counts (which both stores expose), it tracks
-        Copilot's real AIU at ~0.99, so it stands in as a universal cost signal
-        where AIU is absent (Claude). Cache reads are discounted since cached
-        input is far cheaper than fresh input.
+        Useful for rough ordering across harnesses, not a currency-cost calculation:
+        model pricing and output/cache-write multipliers vary.
         """
         return (
             self.input

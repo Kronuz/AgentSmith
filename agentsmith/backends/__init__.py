@@ -21,17 +21,18 @@ __all__ = [
     "select_backends",
 ]
 
+_BACKENDS: dict[str, type[Backend]] = {
+    "copilot": CopilotBackend,
+    "claude": ClaudeBackend,
+    "codex": CodexBackend,
+}
+
 
 def select_backends(harness: str) -> list[Backend]:
     wanted = HARNESSES if harness == "all" else (harness,)
     out: list[Backend] = []
     for name in wanted:
-        backends: dict[str, type[Backend]] = {
-            "copilot": CopilotBackend,
-            "claude": ClaudeBackend,
-            "codex": CodexBackend,
-        }
-        b = backends[name]()
+        b = _BACKENDS[name]()
         if b.available():
             out.append(b)
     if not out:

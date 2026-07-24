@@ -22,7 +22,7 @@ because it needed a working agent (`copilot -p`) that isn't reliably available.
 | --- | --- |
 | `agentsmith/` | The engine, a Python package (stdlib only, no deps). Run as `python -m agentsmith`. |
 | `agentsmith/cli.py` | Argument parsing + every `cmd_*` command. |
-| `agentsmith/model.py` | Dataclasses: `Session`, `Msg`, `FileTouch`, `SearchHit`, `UsageRow` (input/output/cache_read/cache_write/reasoning/aiu, with an `effective` cost-proxy property shown as **wtc**, weighted token count), `Checkpoint`, `PurgeReport`. |
+| `agentsmith/model.py` | Dataclasses: `Session`, `Msg`, `FileTouch`, `SearchHit`, `UsageRow` (normalized disjoint fresh-input/cache-read plus output/cache-write/reasoning/aiu; `effective` is the rough **wtc** estimate), `Checkpoint`, `PurgeReport`. |
 | `agentsmith/util.py` | Color/time/text helpers, `die`. |
 | `agentsmith/purge.py` | `deep_purge` (the shred). |
 | `agentsmith/scan.py` | `run`/`scan_file`/`scan_db` (the everywhere-scanner behind `asmith redact`). |

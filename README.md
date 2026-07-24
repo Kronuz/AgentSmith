@@ -8,7 +8,8 @@ A swiss-army knife for your AI coding-agent sessions, across **three harnesses**
 
 List the directories that have sessions, find/resume the right one, render full
 conversations (with nested subagents), full-text search, token/AIU accounting,
-and completely shred sessions you want gone. The project is **Agentsmith**, and
+and completely shred local session state you want gone. The project is
+**Agentsmith**, and
 the command is `asmith` (as in *Agent Smith* — the one who tracks sessions down
 and erases them).
 
@@ -56,8 +57,8 @@ source <(asmith completion zsh)
 
 Every command takes `-H/--harness {copilot,claude,codex,all}` (default: **all**).
 Aggregate commands (`list`, `dirs`, `search`, `stats`, `usage` leaderboard) merge
-all three and tag each row with a badge: `co` (copilot), `cl` (claude), or
-`cx` (codex). Session
+all three. `list` and `recent` always show the full harness name; compact views
+use `co` (copilot), `cl` (claude), or `cx` (codex). Session
 commands auto-detect which harness owns an id (UUIDs never collide).
 
 ## Where the data comes from
@@ -112,14 +113,14 @@ the full id).
 | `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
 | `asmith search <query…>` | Search sessions (Copilot FTS5; Claude/Codex transcript scan). |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
-| `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under both homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
+| `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under all harness homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
 | `asmith files <session>` | Files touched in a session. |
 | `asmith checkpoints <session>` (`cp`) | Checkpoints (copilot only). `-v` for next steps. |
-| `asmith usage [session]` | Per-model tokens (input/output, cache read/write, reasoning) + AIU for one session, or a cross-harness leaderboard ranked by **wtc** (weighted token count: a cost-weighted proxy comparable across harnesses) with cache-hit %. See `asmith usage --help`. |
+| `asmith usage [session]` | Per-model fresh input/output/cache/reasoning + AIU, or a leaderboard ranked by estimated **wtc**. See `asmith usage --help`. |
 | `asmith recent [-n N]` | Most recent sessions across all directories. |
 | `asmith path [session]` | Print the on-disk location (default: session for cwd). |
 | `asmith stats` | Per-harness totals (sessions, resumable, dirs, span). `--usage` adds AIU. |
-| `asmith rm <id/path…>` (`prune`) | **Shred** session(s) — no vestiges. Takes ids/prefixes **or a path** (all sessions under it). `-y`, `--dry-run`, `-v`, `--aggressive`. |
+| `asmith rm <id/path…>` (`prune`) | **Shred local state** for session(s). Takes ids/prefixes **or a path** (all sessions under it). `-y`, `--dry-run`, `-v`, `--aggressive`. |
 | `asmith purge` | Shred all **empty** sessions (no transcript, 0 turns). `-y`, `--dry-run`, `-v`, `-H`. |
 | `asmith resume [-H h] [target]` | Resume a session — `target` is a **dir** (default: cwd) *or* an **id/prefix** (shell; launches the right CLI). |
 | `asmith cd [session]` | `cd` into a session's on-disk location (shell). |
@@ -147,6 +148,7 @@ asmith dump 10b72094 --no-subagents  # hide subagent (task) turns
 asmith dump 10b72094 --md > chat.md  # Markdown (view with glow/bat/VS Code)
 asmith dump 10b72094 --color -o chat.ansi   # keep ANSI in the file; `cat chat.ansi`
 asmith dump 10b72094 --raw > raw.jsonl      # the underlying transcript file, verbatim
+asmith dump 10b72094 --raw -o raw.jsonl     # equivalently, copy it to a file
 ```
 
 **Subagents.** Copilot keeps `task`-tool subagent turns inline in the transcript;
@@ -210,7 +212,7 @@ It uses the same shredding as `asmith rm`, skips the live session, and confirms 
 leaked into an agent's state, it can also land in logs, per-session `session.db`
 files, Copilot's FTS5 search index, JSON/YAML bookkeeping, tool arguments, and
 subagent transcripts. `asmith redact` is the leak hunter: it walks **every file** under
-both homes (any type, no size cap by default) **and every SQLite database** it finds
+all harness homes (any type, no size cap by default) **and every SQLite database** it finds
 there, so it catches all of it.
 
 ```sh

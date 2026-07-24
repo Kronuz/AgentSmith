@@ -8,7 +8,7 @@ import os
 import re
 import shutil
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, override
 
@@ -32,6 +32,7 @@ from .util import (
     fmt_local,
     green,
     harness_badge,
+    harness_label,
     looks_like_path,
     magenta,
     parse_ts,
@@ -104,15 +105,14 @@ def cmd_list(args: argparse.Namespace) -> None:
     if not sessions:
         print(dim("(no sessions)"))
         return
-    multi = len(backends) > 1
     cols = _term_cols()
     for s in sessions:
         mark = green("*") if s.resumable else dim(".")
-        badge = (harness_badge(s.harness) + " ") if multi else ""
         turns = _turn_count(backends, s)
         prefix = (
-            f"{mark} {badge}{bold(short(s.id))}  {dim(ago(s.updated_at).rjust(4))}  "
-            f"{dim(str(turns).rjust(4) + 't')}  "
+            f"{mark} {_pad(harness_label(s.harness), 7)}  {bold(short(s.id))}  "
+            f"{dim(ago(s.updated_at).rjust(4))}  "
+            f"{dim(str(turns).rjust(4) + ' turns')}  "
         )
         print(prefix + _row_tail(s.cwd, s.name, cols - len(strip_ansi(prefix))))
     print(dim(f"\n{len(sessions)} shown  (* = resumable)"))
@@ -157,7 +157,7 @@ def _session_line(backends: list[Backend], s: Session, indent: str, badge: bool)
     turns = _turn_count(backends, s)
     prefix = (
         f"{indent}{mark} {tag}{bold(short(s.id))}  {dim(ago(s.updated_at).rjust(4))}  "
-        f"{dim(str(turns).rjust(4) + 't')}  "
+        f"{dim(str(turns).rjust(4) + ' turns')}  "
     )
     if not s.name:
         return prefix + dim("(no name)")
@@ -233,7 +233,7 @@ def cmd_dirs(args: argparse.Namespace) -> None:
         last = dim(ago(a["last"]).rjust(4))
         agent = ""
         if multi:
-            badges = "".join(sorted(harness_badge(h) for h in a["harnesses"]))
+            badges = "".join(harness_badge(h) for h in sorted(a["harnesses"]))
             agent = "  " + _pad(badges, 4)
         print(f"{n}  {res}  {last}{agent}  {path(cwd)}")
     hint = "sessions / resumable* / last activity" + (" / agents" if multi else "")
@@ -274,7 +274,7 @@ def cmd_find(args: argparse.Namespace) -> None:
 
 def cmd_resolve(args: argparse.Namespace) -> None:
     backends = select_backends(args.harness)
-    b, s = resolve(backends, args.target, resumable=args.resumable, exact=args.exact)
+    _b, s = resolve(backends, args.target, resumable=args.resumable, exact=args.exact)
     if args.resumable and not s.resumable:
         die(f"session {short(s.id)} is not resumable (no on-disk transcript)")
     print(f"{s.harness}\t{s.id}" if args.with_harness else s.id)
@@ -301,11 +301,13 @@ def cmd_show(args: argparse.Namespace) -> None:
     rows = b.usage(s.id)
     itok = sum(r.input for r in rows)
     otok = sum(r.output for r in rows)
+    ctok = sum(r.cache_read for r in rows)
+    token_text = f"in {itok + ctok:,} (cached {ctok:,}) · out {otok:,}"
     if any(r.aiu is not None for r in rows):
         aiu = sum(r.aiu or 0 for r in rows)
-        field("tokens", f"↑{itok:,} ↓{otok:,}  ·  {aiu:.1f} AIU")
+        field("tokens", f"{token_text} · {aiu:.1f} AIU")
     else:
-        field("tokens", f"↑{itok:,} ↓{otok:,}")
+        field("tokens", token_text)
     field(
         "resumable", green("yes") if s.resumable else red("no (no on-disk transcript)")
     )
@@ -412,17 +414,31 @@ def cmd_dump(args: argparse.Namespace) -> None:
     backends = select_backends(args.harness)
     b, s = resolve(backends, args.session)
     if args.raw:
+        incompatible = (
+            args.tools
+            or args.reasoning
+            or args.user_only
+            or args.assistant_only
+            or args.no_subagents
+            or args.md
+            or args.color
+        )
+        if incompatible:
+            die("--raw cannot be combined with conversation-rendering options")
         raw = b.raw_path(s.id)
         if raw is None:
             die(f"no raw transcript for {short(s.id)}")
-        sys.stdout.write(raw.read_text())
+        if args.out:
+            shutil.copyfile(raw, args.out)
+            print(f"copied raw transcript to {args.out}")
+        else:
+            with raw.open("rb") as source:
+                shutil.copyfileobj(source, sys.stdout.buffer)
         return
     msgs = b.transcript(s.id, subagents=not args.no_subagents)
 
     # decide color: --no-color always wins; --color forces on; plain file → off; else auto
-    if args.no_color:
-        set_color(False)
-    elif args.md:
+    if args.no_color or args.md:
         set_color(False)
     elif args.color:
         set_color(True)
@@ -530,21 +546,20 @@ def cmd_usage(args: argparse.Namespace) -> None:
             tail = "  " + yellow(f"{r.aiu:8.1f} AIU") if r.aiu is not None else ""
             print(
                 f"  {r.model.ljust(22)}  {str(r.calls).rjust(4)} calls  "
-                f"↑{r.input:>9,} ↓{r.output:>7,}  "
+                f"fresh {r.input:>9,}  out {r.output:>7,}  "
                 f"cache r {r.cache_read:>9,} w {r.cache_write:>7,}{reason}{tail}"
             )
         eff = ti + to + tcw + CACHE_READ_WEIGHT * tcr
         hit = tcr / (ti + tcr) * 100 if (ti + tcr) else 0.0
         parts = [f"{tot_aiu:,.1f} AIU"] if has_aiu else []
-        parts.append(f"{eff:,.0f} wtc")
+        parts.append(f"{eff:,.0f} wtc (estimate)")
         parts.append(f"cache hit {hit:.0f}%")
         if len(rows) > 1:
             parts.append(f"{len(rows)} models")
         print(dim("  total: " + " · ".join(parts)))
         return
-    # leaderboard across sessions, ranked by "effective tokens" -- a cost-weighted
-    # token proxy that is comparable across harnesses (copilot AIU and all timing
-    # are copilot-only, so only token counts can anchor a cross-harness metric).
+    # Leaderboard ranked by a deliberately simple weighted-token estimate. Backends
+    # normalize fresh and cached input into disjoint categories first.
     scored: list[tuple[Session, float, float, float, str, int]] = []
     for s in all_sessions(backends):
         b = backend_for(backends, s.harness)
@@ -583,8 +598,9 @@ def cmd_usage(args: argparse.Namespace) -> None:
         print(prefix + _row_tail(s.cwd, s.name, budget) + suffix)
     print(
         dim(
-            f"\ntop {min(len(scored), args.number)} by wtc, weighted token count "
-            "(input + output + cache-write + 0.1×cache-read) · see: asmith usage --help"
+            f"\ntop {min(len(scored), args.number)} by estimated wtc "
+            "(fresh-input + output + cache-write + 0.1×cache-read)"
+            " · see: asmith usage --help"
         )
     )
 
@@ -611,11 +627,13 @@ _DIRS_SENTINEL = "__DIRS__"  # the shell expands this line to directory names
 
 def _emit_positional(kind: str | None) -> None:
     if kind in ("ids", "both"):
+        sessions: list[Session]
         try:
-            for s in all_sessions(select_backends("all")):
-                print(short(s.id))
+            sessions = all_sessions(select_backends("all"))
         except Exception:  # noqa: BLE001 - completion must never raise
-            pass
+            sessions = []
+        for s in sessions:
+            print(short(s.id))
     if kind in ("dirs", "both"):
         print(_DIRS_SENTINEL)
 
@@ -764,7 +782,10 @@ def cmd_redact(args: argparse.Namespace) -> None:
     homes = [(b.name, b.home) for b in backends]
     fixed = not args.regex
     rx = scan.compile_pattern(args.pattern, fixed=fixed, ignore_case=args.ignore_case)
-    mask = (args.mask or "*").encode("utf-8")[0]
+    mask_bytes = (args.mask or "*").encode("utf-8")
+    if len(mask_bytes) != 1:
+        die("--mask must be exactly one single-byte character")
+    mask = mask_bytes[0]
     reveal = args.show_secret
     limit = max(0, args.max_count)  # 0 = unlimited (grep-style default)
     verbose = args.verbose
@@ -894,12 +915,18 @@ def cmd_stats(args: argparse.Namespace) -> None:
             aiu += sum(r.aiu or 0 for r in b.usage(s.id)) if args.usage else 0
         span = ""
         if sessions:
-            lo = min(parse_ts(s.created_at) for s in sessions)
-            hi = max(parse_ts(s.updated_at) for s in sessions)
-            span = (
-                f"{datetime.fromtimestamp(lo):%Y-%m-%d} → "
-                f"{datetime.fromtimestamp(hi):%Y-%m-%d}"
-            )
+            created = [parse_ts(s.created_at) for s in sessions]
+            updated = [parse_ts(s.updated_at) for s in sessions]
+            valid_created = [ts for ts in created if ts > 0]
+            valid_updated = [ts for ts in updated if ts > 0]
+            if valid_created and valid_updated:
+                lo = min(valid_created)
+                hi = max(valid_updated)
+                span = (
+                    f"{datetime.fromtimestamp(lo, timezone.utc).astimezone():%Y-%m-%d}"
+                    " → "
+                    f"{datetime.fromtimestamp(hi, timezone.utc).astimezone():%Y-%m-%d}"
+                )
         line = (
             f"  {harness_badge(b.name)} {bold(b.name.ljust(8))} "
             f"{len(sessions):>4} sessions  ({green(str(resumable) + ' resumable')})  "
@@ -974,7 +1001,7 @@ def _shred_targets(
     def line(b: Backend, s: Session) -> None:
         prefix = (
             f"{red('shred')} {harness_badge(s.harness)} {bold(short(s.id))}  "
-            f"{dim(str(_turn_count(backends, s)).rjust(4) + 't')}  "
+            f"{dim(str(_turn_count(backends, s)).rjust(4) + ' turns')}  "
         )
         print(prefix + _row_tail(s.cwd, s.name, cols_ - len(strip_ansi(prefix))))
 
@@ -1015,7 +1042,7 @@ def _shred_targets(
         print(f"{red('shredded')} {harness_badge(s.harness)} {bold(short(s.id))}")
         if args.verbose:
             _print_report(rep, args.verbose)
-    print(green(f"shredded {len(targets)} session(s); no vestiges remain"))
+    print(green(f"shredded {len(targets)} session(s); no local vestiges remain"))
 
 
 def cmd_rm(args: argparse.Namespace) -> None:
@@ -1117,7 +1144,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def _mark(action: argparse.Action, kind: str) -> argparse.Action:
         """Tag a positional with the completion it wants: 'ids', 'dirs', or 'both'."""
-        setattr(action, "completer", kind)
+        setattr(action, "completer", kind)  # noqa: B010 - argparse extension metadata
         return action
 
     def add_sort(sp: argparse.ArgumentParser) -> None:
@@ -1133,10 +1160,11 @@ def build_parser() -> argparse.ArgumentParser:
         )
 
     _cols_list = (
-        "Columns:  <*> <id>  <age>  <turns>t  <directory>  <name>\n"
+        "Columns:  <*> <harness>  <id>  <age>  <turns>  <directory>  <name>\n"
         "  *       resumable (green *) or not (dim .)\n"
+        "  harness copilot / claude / codex\n"
         "  id      8-char session id       age    time since last activity\n"
-        "  turns   user/agent exchanges    name   session name (/rename or aiTitle)"
+        "  turns   user-submitted turns    name   session name (/rename or aiTitle)"
     )
     sp = sub.add_parser(
         "list",
@@ -1234,7 +1262,11 @@ def build_parser() -> argparse.ArgumentParser:
     _mark(sp.add_argument("session", help="id / prefix / path / ."), "ids")
     sp.set_defaults(func=cmd_show)
 
-    sp = sub.add_parser("dump", parents=[common], help="dump a session's conversation")
+    sp = sub.add_parser(
+        "dump",
+        parents=[common],
+        help="dump one session's conversation (a path selects the newest)",
+    )
     _mark(sp.add_argument("session", help="id / prefix / path / ."), "ids")
     sp.add_argument(
         "-t", "--tools", action="store_true", help="include tool args + results"
@@ -1253,7 +1285,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--color", action="store_true", help="force ANSI color (e.g. into a file)"
     )
-    sp.add_argument("--raw", action="store_true", help="emit the raw transcript file")
+    sp.add_argument(
+        "--raw",
+        action="store_true",
+        help="emit one underlying transcript byte-for-byte (-o copies to FILE)",
+    )
     sp.add_argument("-o", "--out", help="write to FILE")
     sp.set_defaults(func=cmd_dump)
 
@@ -1280,12 +1316,12 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Per-session token usage (input/output, cache read+write, reasoning) "
             "and AIU, or a cross-harness leaderboard when no session is given. "
-            "The leaderboard ranks by wtc (weighted token count) = input + output "
-            "+ cache-write + 0.1*cache-read: a cost-weighted proxy built only from "
-            "token counts, so it is comparable across harnesses (Copilot AIU and "
-            "timing are Copilot-only). It tracks Copilot's real AIU at ~0.99. "
-            "Cache reads are discounted to 10% since cached input is far cheaper "
-            "than fresh input. 'cache hit' is cache-read / (input + cache-read). "
+            "Backends normalize fresh input and cache reads into disjoint counts. "
+            "The leaderboard ranks by wtc (weighted token count) = fresh-input + "
+            "output + cache-write + 0.1*cache-read. This is a rough, model-agnostic "
+            "estimate, not a token total or currency cost: model prices and output/"
+            "cache-write multipliers vary. Cache reads use 0.1 as a broadly useful "
+            "approximation. 'cache hit' is cache-read / (fresh-input + cache-read). "
             "Multi-model sessions show the dominant model, e.g. 'opus-4.8 +1 more'."
         ),
     )
@@ -1471,8 +1507,8 @@ def main(argv: list[str]) -> int:
     except BrokenPipeError:
         try:
             sys.stdout.close()
-        except Exception:
-            pass
+        except OSError:
+            return 0
     return 0
 
 

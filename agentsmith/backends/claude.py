@@ -82,10 +82,13 @@ class ClaudeBackend(Backend):
                 elif t == "user" and not e.get("isMeta"):
                     msg = e.get("message", {})
                     content = msg.get("content")
-                    if isinstance(content, str):
-                        turns += 1
-                    elif isinstance(content, list) and any(
-                        isinstance(b, dict) and b.get("type") == "text" for b in content
+                    if (
+                        isinstance(content, str)
+                        or isinstance(content, list)
+                        and any(
+                            isinstance(b, dict) and b.get("type") == "text"
+                            for b in content
+                        )
                     ):
                         turns += 1
         return {
@@ -333,7 +336,8 @@ class ClaudeBackend(Backend):
 
     @override
     def state_location(self, session_id: str) -> Path | None:
-        return self._path(session_id)
+        path = self._path(session_id)
+        return path.parent if path is not None else None
 
     @override
     def remove(

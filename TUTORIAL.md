@@ -36,9 +36,9 @@ List, filter, and locate sessions:
 
 ```console
 $ asmith ls -n 5
-* co e2ae342a   36m    1t  Add Function Definition Comments
-* co 413fc324   44m    6t  Build Copilot Session Toolset
-* cl 10b72094   21d  219t  Enhance public blog projects pages
+* copilot  e2ae342a   36m      1 turns  Add Function Definition Comments
+* copilot  413fc324   44m      6 turns  Build Copilot Session Toolset
+* claude   10b72094   21d    219 turns  Enhance public blog projects pages
   ...
 $ asmith ls --here                 # only this directory
 $ asmith ls -g kronuz              # name/cwd contains "kronuz"
@@ -53,10 +53,10 @@ grouped by directory instead of a flat list? Use `asmith tree`:
 ```console
 $ asmith tree                      # path → its sessions, one-liner each
 /Users/gmendezb/code/KronuzBlog
-  * co ee22a500    4h   15t  Set Up KronuzBlog
-  * cl 10b72094   21d  219t  Enhance public blog projects pages
+  * co ee22a500    4h    15 turns  Set Up KronuzBlog
+  * cl 10b72094   21d   219 turns  Enhance public blog projects pages
 /Users/gmendezb/code/Copilot
-  * co 413fc324    1h   15t  Build Copilot Session Toolset
+  * co 413fc324    1h    15 turns  Build Copilot Session Toolset
   ...
 $ asmith tree --by agent           # group by agent first, then directory
 $ asmith tree -H claude            # just one agent
@@ -114,7 +114,7 @@ $ asmith dump 038f5820 --user-only     # just what you asked
 $ asmith dump 038f5820 --no-subagents  # hide subagent (task) turns
 $ asmith dump 038f5820 --md > chat.md  # Markdown (view with glow / bat / VS Code)
 $ asmith dump 038f5820 --color -o chat.ansi   # keep ANSI in the file; then `cat chat.ansi`
-$ asmith dump 038f5820 --raw > raw.jsonl      # the transcript file, byte-for-byte
+$ asmith dump 038f5820 --raw -o raw.jsonl      # one transcript, byte-for-byte
 ```
 
 **Subagents** (spawned by the `task` tool) are shown nested and labeled under a
@@ -162,15 +162,15 @@ $ asmith show 10b72094
 $ asmith files 10b72094                # every file the session touched
 $ asmith checkpoints 0feccbe6 -v       # Copilot checkpoints + next steps
 $ asmith usage 413fc324                # per-model tokens (in/out, cache r/w, reasoning) + AIU
-$ asmith usage                         # leaderboard by wtc, weighted token count (+ cache-hit %)
+$ asmith usage                         # leaderboard by estimated wtc (+ cache-hit %)
 $ asmith stats                         # per-harness totals
 ```
 
-AIU (Copilot's billing unit) shows where available; Claude reports tokens only. The
-leaderboard ranks by **wtc** (weighted token count = `input + output + cache-write + 0.1×cache-read`),
-a cost-weighted proxy that tracks Copilot's AIU at ~0.99 and is comparable across both
-harnesses. Multi-model sessions are tagged with the dominant model (`opus-4.8 +1 more`).
-Run `asmith usage --help` for the full definition.
+AIU (Copilot's billing unit) shows where available. Backends normalize fresh and
+cached input into disjoint counts. The leaderboard's estimated **wtc** is
+`fresh-input + output + cache-write + 0.1×cache-read`: useful for rough ordering,
+not a currency cost, because model prices and output/cache-write multipliers vary.
+Multi-model sessions show the dominant model (`opus-4.8 +1 more`).
 
 ---
 

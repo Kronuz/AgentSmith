@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NoReturn
 
-
 _COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 
 
@@ -73,6 +72,14 @@ def harness_badge(name: str) -> str:
     return green("cx")
 
 
+def harness_label(name: str) -> str:
+    if name == "copilot":
+        return cyan(name)
+    if name == "claude":
+        return magenta(name)
+    return green(name)
+
+
 def short(session_id: str) -> str:
     return session_id[:8]
 
@@ -125,7 +132,9 @@ def fmt_local(ts: str | None) -> str:
     t = parse_ts(ts)
     if not t:
         return "?"
-    return datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M")
+    return (
+        datetime.fromtimestamp(t, timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
+    )
 
 
 def iso_from_mtime(path: Path) -> str:

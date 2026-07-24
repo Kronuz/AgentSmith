@@ -77,7 +77,12 @@ class Backend(ABC):
         cwd = real(arg if arg not in (".", "./") else os.getcwd())
         out = [s for s in self.list_sessions() if s.cwd and real(s.cwd) == cwd]
         if not out and not exact:
-            out = [s for s in self.list_sessions() if s.cwd and cwd in real(s.cwd)]
+            prefix = cwd.rstrip(os.sep) + os.sep
+            out = [
+                s
+                for s in self.list_sessions()
+                if s.cwd and real(s.cwd).startswith(prefix)
+            ]
         if resumable:
             out = [s for s in out if s.resumable]
         return out
