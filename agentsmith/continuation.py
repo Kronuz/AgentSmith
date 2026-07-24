@@ -255,29 +255,42 @@ def prepare_continuation(
                     if (candidate := source / name).is_file()
                 ]
                 if not candidates:
-                    candidates = sorted(source.glob("*.jsonl"))
-                if len(candidates) != 1:
+                    candidates = sorted(
+                        (
+                            *source.glob("*.jsonl"),
+                            *source.glob("*.jsonl.gz"),
+                        )
+                    )
+                if not candidates:
                     raise ValueError(
-                        f"native archive must contain one recognizable transcript: "
-                        f"{source}"
+                        f"native archive contains no recognizable transcripts: {source}"
                     )
-                transcript = candidates[0]
-                harness = source_harness or detect_dump(transcript)
-                if harness is None:
-                    raise ValueError(
-                        f"cannot detect archive format: {source}; use --from"
+                detected_harnesses: set[str] = set()
+                for transcript in candidates:
+                    transcript_harness = source_harness or detect_dump(transcript)
+                    if transcript_harness is None:
+                        raise ValueError(
+                            f"cannot detect dump format: {transcript}; use --from"
+                        )
+                    detected_harnesses.add(transcript_harness)
+                    messages = parse_dump(transcript, transcript_harness)
+                    if not messages:
+                        warnings.append(
+                            f"no conversation messages recovered from {transcript}"
+                        )
+                    conversations.append(
+                        _render_dump(transcript, transcript_harness, messages)
                     )
-                messages = parse_dump(transcript, harness)
-                if not messages:
-                    warnings.append(
-                        f"no conversation messages recovered from {transcript}"
-                    )
-                conversations.append(_render_dump(transcript, harness, messages))
-                session_count += 1
+                session_count += len(candidates)
+                harness = (
+                    next(iter(detected_harnesses))
+                    if len(detected_harnesses) == 1
+                    else None
+                )
                 kind = "native-archive"
                 warnings.append(
-                    f"{source.name}: companion files were preserved but only "
-                    f"{transcript.name} was normalized into HANDOFF.md"
+                    f"{source.name}: companion files were preserved and "
+                    f"{len(candidates)} transcript(s) were normalized into HANDOFF.md"
                 )
             elif source.is_file():
                 harness = source_harness or detect_dump(source)

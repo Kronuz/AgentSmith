@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -378,6 +379,34 @@ class BackendFixturesTest(unittest.TestCase):
         copied = archive_prepared / "sources" / "001-old-copilot-archive"
         self.assertTrue((copied / "plan.md").is_file())
         self.assertIn("hello there", (archive_prepared / "HANDOFF.md").read_text())
+
+        multi_archive = self.root / "multi-dump-archive"
+        multi_archive.mkdir()
+        shutil.copy2(raw, multi_archive / "claude.jsonl")
+        shutil.copy2(
+            Path(self.env["CODEX_SESSIONS"])
+            / "rollout-33333333-3333-3333-3333-333333333333.jsonl",
+            multi_archive / "codex.jsonl",
+        )
+        (multi_archive / "notes.md").write_text("# preserved companion\n")
+        multi_prepared = self.root / "prepared-multi-archive"
+        multi_result = self.run_cli(
+            "import",
+            str(multi_archive),
+            "--to",
+            "copilot",
+            "-o",
+            str(multi_prepared),
+        )
+        self.assertIn("prepared 2 recovered session(s)", multi_result.stdout)
+        multi_handoff = (multi_prepared / "HANDOFF.md").read_text()
+        self.assertIn("Native claude dump", multi_handoff)
+        self.assertIn("Native codex dump", multi_handoff)
+        self.assertTrue(
+            (
+                multi_prepared / "sources" / "001-multi-dump-archive" / "notes.md"
+            ).is_file()
+        )
 
     def test_project_and_global_agent_context_stay_separate(self) -> None:
         (self.cwd / "AGENTS.md").write_text("# project instructions\n")

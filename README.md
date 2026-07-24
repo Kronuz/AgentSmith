@@ -223,8 +223,9 @@ asmith import ~/exports/global-agent-config --to codex --launch
 ```
 
 Exports are preferred. Native Claude, Codex, and Copilot JSONL dumps are a recovery
-fallback; gzip transcripts and archive directories containing `events.jsonl(.gz)`
-are supported. Dumps can omit memory, child sessions, usage, and sidecars, and the
+fallback; gzip transcripts and archive directories containing one or more top-level
+`.jsonl`/`.jsonl.gz` transcripts are supported. Dumps can omit memory, child sessions,
+usage, and sidecars, and the
 importer reports those limitations. Project context remains attached to its source
 project namespace. A global-schema `import` preserves the verified bundle under `source/`,
 copies visible files into an editable `candidate/`, and creates `HANDOFF.md` mapping

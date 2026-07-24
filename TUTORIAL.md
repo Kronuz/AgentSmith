@@ -244,8 +244,10 @@ $ asmith import old-session-archive/ --to codex
 ```
 
 Agentsmith auto-detects normal Claude/Codex/Copilot JSONL. `--from` resolves an
-ambiguous dump. Archive directories preserve companion files, but raw recovery
-cannot restore memory, child sessions, or sidecars that were never saved.
+ambiguous dump. A directory source normalizes every recognizable top-level
+`.jsonl`/`.jsonl.gz` transcript and preserves the entire directory, including companion
+files. Raw recovery cannot restore memory, child sessions, or sidecars that were never
+saved.
 
 To combine all live sessions for a directory into one continuation:
 
