@@ -148,6 +148,30 @@ class BackendFixturesTest(unittest.TestCase):
         memory = path.parent / "memory"
         memory.mkdir()
         (memory / "MEMORY.md").write_text("# fixture memory\n")
+        _jsonl(
+            path.with_suffix("") / "subagents" / "agent-fixture.jsonl",
+            [
+                {
+                    "type": "assistant",
+                    "message": {
+                        "model": "claude-fixture",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "name": "Write",
+                                "input": {"file_path": "/tmp/subagent.txt"},
+                            }
+                        ],
+                        "usage": {
+                            "input_tokens": 7,
+                            "output_tokens": 1,
+                            "cache_read_input_tokens": 0,
+                            "cache_creation_input_tokens": 0,
+                        },
+                    },
+                }
+            ],
+        )
 
     def _codex(self) -> None:
         home = Path(self.env["CODEX_HOME"])
@@ -238,6 +262,20 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("fresh        30", result.stdout)
         self.assertIn("cache r       120", result.stdout)
         self.assertIn("2 calls", result.stdout)
+        main = self.run_cli("usage", "-H", "codex", "--main-only", "33333333")
+        self.assertIn("fresh        20", main.stdout)
+        self.assertIn("cache r        80", main.stdout)
+        self.assertIn("1 calls", main.stdout)
+
+    def test_claude_usage_and_files_include_subagents_by_default(self) -> None:
+        usage = self.run_cli("usage", "-H", "claude", "22222222")
+        self.assertIn("fresh        17", usage.stdout)
+        main_usage = self.run_cli("usage", "-H", "claude", "--main-only", "22222222")
+        self.assertIn("fresh        10", main_usage.stdout)
+        files = self.run_cli("files", "-H", "claude", "22222222")
+        self.assertIn("/tmp/subagent.txt", files.stdout)
+        main_files = self.run_cli("files", "-H", "claude", "--main-only", "22222222")
+        self.assertNotIn("/tmp/subagent.txt", main_files.stdout)
 
     def test_path_export_includes_roots_and_memory(self) -> None:
         destination = self.root / "bundle"

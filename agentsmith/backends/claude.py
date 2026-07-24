@@ -161,6 +161,16 @@ class ClaudeBackend(Backend):
             return
         yield from self._iter_file(path)
 
+    def _session_event_paths(self, session_id: str, subagents: bool) -> list[Path]:
+        path = self._path(session_id)
+        if path is None:
+            return []
+        paths = [path]
+        subdir = path.with_suffix("") / "subagents"
+        if subagents and subdir.is_dir():
+            paths.extend(sorted(subdir.glob("*.jsonl")))
+        return paths
+
     def _iter_file(self, path: Path) -> Iterator[dict[str, Any]]:
         try:
             fh = path.open()
@@ -267,40 +277,48 @@ class ClaudeBackend(Backend):
         return msgs
 
     @override
-    def files(self, session_id: str) -> list[FileTouch]:
+    def files(self, session_id: str, subagents: bool = True) -> list[FileTouch]:
         seen: dict[str, FileTouch] = {}
-        for e in self._iter_lines(session_id):
-            if e.get("type") != "assistant":
-                continue
-            content = e.get("message", {}).get("content", [])
-            for b in content if isinstance(content, list) else []:
-                if isinstance(b, dict) and b.get("type") == "tool_use":
-                    name = b.get("name", "")
-                    raw_in = b.get("input")
-                    fp = raw_in.get("file_path") if isinstance(raw_in, dict) else None
-                    if name in _CLAUDE_FILE_TOOLS and fp and fp not in seen:
-                        seen[fp] = FileTouch(fp, name, None)
+        for path in self._session_event_paths(session_id, subagents):
+            for e in self._iter_file(path):
+                if e.get("type") != "assistant":
+                    continue
+                content = e.get("message", {}).get("content", [])
+                for b in content if isinstance(content, list) else []:
+                    if isinstance(b, dict) and b.get("type") == "tool_use":
+                        name = b.get("name", "")
+                        raw_in = b.get("input")
+                        fp = (
+                            raw_in.get("file_path")
+                            if isinstance(raw_in, dict)
+                            else None
+                        )
+                        if name in _CLAUDE_FILE_TOOLS and fp and fp not in seen:
+                            seen[fp] = FileTouch(fp, name, None)
         return list(seen.values())
 
     @override
-    def usage(self, session_id: str) -> list[UsageRow]:
+    def usage(self, session_id: str, subagents: bool = True) -> list[UsageRow]:
         agg: dict[str, dict[str, int]] = {}
-        for e in self._iter_lines(session_id):
-            if e.get("type") != "assistant":
-                continue
-            msg = e.get("message", {})
-            u = msg.get("usage")
-            if not isinstance(u, dict):
-                continue
-            model = msg.get("model", "?")
-            if model.startswith("<synthetic"):
-                continue
-            a = agg.setdefault(model, {"calls": 0, "i": 0, "o": 0, "cr": 0, "cw": 0})
-            a["calls"] += 1
-            a["i"] += u.get("input_tokens", 0) or 0
-            a["o"] += u.get("output_tokens", 0) or 0
-            a["cr"] += u.get("cache_read_input_tokens", 0) or 0
-            a["cw"] += u.get("cache_creation_input_tokens", 0) or 0
+        for path in self._session_event_paths(session_id, subagents):
+            for e in self._iter_file(path):
+                if e.get("type") != "assistant":
+                    continue
+                msg = e.get("message", {})
+                u = msg.get("usage")
+                if not isinstance(u, dict):
+                    continue
+                model = msg.get("model", "?")
+                if model.startswith("<synthetic"):
+                    continue
+                a = agg.setdefault(
+                    model, {"calls": 0, "i": 0, "o": 0, "cr": 0, "cw": 0}
+                )
+                a["calls"] += 1
+                a["i"] += u.get("input_tokens", 0) or 0
+                a["o"] += u.get("output_tokens", 0) or 0
+                a["cr"] += u.get("cache_read_input_tokens", 0) or 0
+                a["cw"] += u.get("cache_creation_input_tokens", 0) or 0
         return [
             UsageRow(
                 model,

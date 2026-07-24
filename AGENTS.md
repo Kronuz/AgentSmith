@@ -74,6 +74,9 @@ A package, three layers:
 Usage summaries are cached per session under `~/.cache/asmith/usage/`, keyed by
 the native artifacts' paths, mtimes, and sizes. Both usage and Claude index caches
 use atomic replacement so concurrent `asmith` invocations cannot leave partial JSON.
+Claude subagent JSONLs and Codex child threads contribute to parent usage/files by
+default; `usage --main-only` and `files --main-only` exclude distinguishable children.
+Copilot's store attributes these records to the parent and cannot always separate them.
 
 ### Adding a harness
 

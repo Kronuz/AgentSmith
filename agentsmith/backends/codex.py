@@ -298,9 +298,12 @@ class CodexBackend(Backend):
         )
 
     @override
-    def files(self, session_id: str) -> list[FileTouch]:
+    def files(self, session_id: str, subagents: bool = True) -> list[FileTouch]:
         seen: dict[str, FileTouch] = {}
-        for sid in [session_id, *self._child_ids(session_id)]:
+        session_ids = (
+            [session_id, *self._child_ids(session_id)] if subagents else [session_id]
+        )
+        for sid in session_ids:
             for event in self._events(sid):
                 payload = event.get("payload", {})
                 if event.get("type") != "response_item" or payload.get("type") not in {
@@ -331,9 +334,12 @@ class CodexBackend(Backend):
         return list(seen.values())
 
     @override
-    def usage(self, session_id: str) -> list[UsageRow]:
+    def usage(self, session_id: str, subagents: bool = True) -> list[UsageRow]:
         agg: dict[str, dict[str, int]] = {}
-        for sid in [session_id, *self._child_ids(session_id)]:
+        session_ids = (
+            [session_id, *self._child_ids(session_id)] if subagents else [session_id]
+        )
+        for sid in session_ids:
             model = "?"
             for event in self._events(sid):
                 payload = event.get("payload", {})

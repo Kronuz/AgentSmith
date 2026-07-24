@@ -572,7 +572,7 @@ def cmd_search(args: argparse.Namespace) -> None:
 def cmd_files(args: argparse.Namespace) -> None:
     backends = select_backends(args.harness)
     b, s = resolve(backends, args.session)
-    touches = b.files(s.id)
+    touches = b.files(s.id, subagents=not args.main_only)
     if not touches:
         print(dim("(no files recorded)"))
         return
@@ -604,7 +604,7 @@ def cmd_usage(args: argparse.Namespace) -> None:
     backends = select_backends(args.harness)
     if args.session:
         b, s = resolve(backends, args.session)
-        rows = usage_for(b, s.id)
+        rows = usage_for(b, s.id, subagents=not args.main_only)
         if not rows:
             print(dim("(no usage recorded)"))
             return
@@ -639,7 +639,7 @@ def cmd_usage(args: argparse.Namespace) -> None:
     scored: list[tuple[Session, float, float, float, str, int]] = []
     for s in all_sessions(backends):
         b = backend_for(backends, s.harness)
-        rows = usage_for(b, s.id)
+        rows = usage_for(b, s.id, subagents=not args.main_only)
         if not rows:
             continue
         eff = sum(r.effective for r in rows)
@@ -1416,6 +1416,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="file touches recorded or inferred from session tool calls",
     )
     _mark(sp.add_argument("session", help="id / prefix / path / ."), "ids")
+    sp.add_argument(
+        "--main-only", action="store_true", help="exclude distinguishable subagents"
+    )
     sp.set_defaults(func=cmd_files)
 
     sp = sub.add_parser(
@@ -1446,6 +1449,9 @@ def build_parser() -> argparse.ArgumentParser:
             "session", nargs="?", help="id / prefix / path / . (omit for leaderboard)"
         ),
         "ids",
+    )
+    sp.add_argument(
+        "--main-only", action="store_true", help="exclude distinguishable subagents"
     )
     add_number(sp, 15)
     sp.set_defaults(func=cmd_usage)

@@ -51,12 +51,15 @@ def _decode_rows(value: Any) -> list[UsageRow] | None:
     return rows
 
 
-def usage_for(backend: Backend, session_id: str) -> list[UsageRow]:
+def usage_for(
+    backend: Backend, session_id: str, subagents: bool = True
+) -> list[UsageRow]:
     artifacts = backend.artifact_paths(session_id)
     signature = _signature(artifacts)
     if not signature:
-        return backend.usage(session_id)
-    cache = CACHE_DIR / "usage" / backend.name / f"{session_id}.json"
+        return backend.usage(session_id, subagents=subagents)
+    suffix = "" if subagents else "-main"
+    cache = CACHE_DIR / "usage" / backend.name / f"{session_id}{suffix}.json"
     try:
         value = json.loads(cache.read_text())
         if value.get("signature") == signature:
@@ -66,7 +69,7 @@ def usage_for(backend: Backend, session_id: str) -> list[UsageRow]:
     except (OSError, json.JSONDecodeError, AttributeError):
         pass
 
-    rows = backend.usage(session_id)
+    rows = backend.usage(session_id, subagents=subagents)
     cache.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(
         {"signature": signature, "rows": [asdict(row) for row in rows]},

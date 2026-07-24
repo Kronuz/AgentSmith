@@ -123,9 +123,9 @@ the full id).
 | `asmith search <query…>` | Literal-phrase search across sessions (Copilot FTS5; Claude/Codex scan), merged by recency. |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
 | `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under all harness homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
-| `asmith files <session>` | File touches recorded or inferred from tool calls (not a workspace snapshot). |
+| `asmith files <session>` | File touches recorded or inferred from tool calls, including distinguishable subagents by default (not a workspace snapshot). `--main-only` excludes them. |
 | `asmith checkpoints <session>` (`cp`) | Checkpoints (copilot only). `-v` for next steps. |
-| `asmith usage [session]` | Per-model fresh input/output/cache/reasoning + AIU, or a leaderboard ranked by estimated **wtc**. See `asmith usage --help`. |
+| `asmith usage [session]` | Per-model fresh input/output/cache/reasoning + AIU, including distinguishable subagents by default, or a leaderboard ranked by estimated **wtc**. `--main-only` excludes them. |
 | `asmith recent [-n N]` | Most recent sessions across all directories. |
 | `asmith path [session]` | Print the on-disk location (default: session for cwd). |
 | `asmith stats` | Per-harness totals (sessions, resumable, dirs, span). `--usage` adds AIU. |

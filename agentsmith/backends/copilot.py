@@ -184,7 +184,7 @@ class CopilotBackend(Backend):
         return msgs
 
     @override
-    def files(self, session_id: str) -> list[FileTouch]:
+    def files(self, session_id: str, subagents: bool = True) -> list[FileTouch]:
         rows = (
             self.con()
             .execute(
@@ -199,7 +199,7 @@ class CopilotBackend(Backend):
         ]
 
     @override
-    def usage(self, session_id: str) -> list[UsageRow]:
+    def usage(self, session_id: str, subagents: bool = True) -> list[UsageRow]:
         rows = (
             self.con()
             .execute(
