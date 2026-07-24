@@ -143,7 +143,10 @@ def iso_from_mtime(path: Path) -> str:
 
 _REMINDER_RE = re.compile(r"<system[_-]reminder>.*?</system[_-]reminder>", re.DOTALL)
 _DATETIME_RE = re.compile(r"<current_datetime>.*?</current_datetime>", re.DOTALL)
-_POLICY_RE = re.compile(r"^LinkedIn enterprise Copilot CLI policy:.*$", re.MULTILINE)
+_POLICY_RE = re.compile(
+    r"^(?:[^:\n]+ )?enterprise Copilot CLI policy:.*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def clean_user(text: str) -> str:

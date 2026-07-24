@@ -498,7 +498,11 @@ def prepare_global_import(
                     "ssh",
                     "network",
                     "workiq",
-                    "linkedin",
+                    "corporate",
+                    "company",
+                    "enterprise",
+                    "employer",
+                    "work-only",
                     "internal",
                 )
                 if term in text

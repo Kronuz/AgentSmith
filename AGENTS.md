@@ -205,7 +205,7 @@ into a file); `--raw` streams the underlying transcript file verbatim.
 
 ## Conventions (must-hold)
 
-- **Interpreter**: LinkedIn-managed `/export/apps/python/3.12/bin/python3`
+- **Interpreter**: enterprise-managed `/export/apps/python/3.12/bin/python3`
   (stdlib only — do not add third-party deps; this file must stay `pip`-free).
 - **Lint/type**: `ruff format` + `ruff check` clean, and `pyrefly check` at
   `preset = "strict"` with **0 errors**. Every overriding backend method carries

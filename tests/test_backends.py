@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from agentsmith.util import clean_user
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -45,6 +47,13 @@ class BackendFixturesTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    def test_clean_user_removes_vendor_neutral_enterprise_policy_banner(self) -> None:
+        text = (
+            "ExampleCorp enterprise Copilot CLI policy: restricted\n"
+            "keep this user request"
+        )
+        self.assertEqual(clean_user(text), "keep this user request")
 
     def run_cli(
         self, *args: str, check: bool = True
