@@ -270,7 +270,8 @@ AgentSmith auto-detects normal Claude/Codex/Copilot JSONL. `--from` resolves an
 ambiguous dump. A directory source normalizes every recognizable top-level
 `.jsonl`/`.jsonl.gz` transcript and preserves the entire directory, including companion
 files. Raw recovery cannot restore memory, child sessions, or sidecars that were never
-saved.
+saved. Because raw material may contain no cwd metadata, an omitted `--cwd` uses the
+current directory and prints a warning.
 
 To combine all live sessions for a directory into one continuation:
 
@@ -291,10 +292,12 @@ $ asmith merge ~/code/api ~/code/frontend 10b72094 \
     --cwd ~/code/workspace -o ~/imports/combined-live-work
 ```
 
-Sessions selected more than once are deduplicated. If selected sessions span several
-working directories and `--cwd` is omitted, the handoff defaults to your current
-directory and prints a warning. `merge --cwd` does not launch anything: it records
-the workspace that a later `launch` should use.
+Sessions selected more than once are deduplicated. One distinct source cwd is inferred.
+If selected sessions span several working directories, `--cwd` is required because a
+new agent process can have only one launch workspace. It does not filter anything:
+all sessions and their original cwd values remain in the prepared handoff.
+`merge --cwd` does not launch anything; it records the workspace that a later
+`launch` should use.
 
 ### Launch any handoff
 
@@ -312,8 +315,16 @@ $ asmith launch copilot ./NEXT_STEPS.md --cwd ~/code/project
 ```
 
 Prepared continuations carry their workspace in `manifest.json`; `--cwd` overrides
-it. A standalone file uses the current directory unless `--cwd` is supplied. The
-selected directory must already exist or AgentSmith refuses to launch.
+it. The manifest names these separately: `source_cwds` preserves every original
+directory, while `launch_cwd` is the single execution workspace. If a recorded
+`launch_cwd` disappears after preparation, launch warns and falls back to the current
+directory. A standalone file uses the current directory unless `--cwd` is supplied.
+An explicit override must exist or AgentSmith refuses to launch.
+
+`launch` is otherwise generic and thin. It does not inject import, merge, ingestion,
+review, or rollback instructions; generated handoffs contain those policies
+themselves. For an arbitrary document it adds only “Read and follow the handoff at
+…”, then starts the selected agent.
 
 ### Exhaustive ingestion in generated handoffs
 

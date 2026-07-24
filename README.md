@@ -244,6 +244,8 @@ newest session for the current directory.
 
 - With no target, export sessions for the current project.
 - A target may be a full session id, unique id prefix, or project path.
+- Every exported session retains its original cwd; multi-project bundles preserve all
+  distinct project roots rather than collapsing them into one.
 - An exact agent home (`~/.codex`, `~/.claude`, `~/.copilot`) selects that agent's
   global configuration.
 - `--global`: export global configuration for all selected harnesses.
@@ -266,8 +268,10 @@ asmith export --global -o ~/exports/globals
 - Accepts one or more AgentSmith bundles, native `.jsonl`/`.jsonl.gz` dumps, or
   archive directories. Multiple sources become one handoff.
 - `--from copilot|claude|codex`: resolve an ambiguous native dump dialect.
-- `--cwd PROJECT`: explicit launch workspace. Project/session imports default to the
-  current directory; global imports default to their prepared directory.
+- `--cwd PROJECT`: explicit launch workspace. With one recorded source cwd it is
+  inferred; multiple recorded cwds require this option. Sources without cwd metadata
+  use the current directory with a warning. Global imports default to their prepared
+  directory.
 - `-o/--out PREPARED`: new review directory; otherwise use the XDG state directory.
 - `-v/--verbose`: describe the handoff and suggested launch command on stderr.
 
@@ -279,8 +283,8 @@ asmith export --global -o ~/exports/globals
 - Multiple targets are combined chronologically and deduplicated.
 - `--recursive`: for path targets, include sessions in nested project directories.
 - `--cwd PROJECT`: workspace recorded for a later `launch`; it does not launch now.
-  When all sessions share one cwd it is inferred; mixed cwd selections otherwise use
-  the current directory.
+  When all sessions share one cwd it is inferred; mixed cwd selections require this
+  option.
 - `--no-memory` / `--no-project-context`: omit those exported inputs.
 - `-o/--out PREPARED`: new review directory; otherwise use the XDG state directory.
 - `-v/--verbose`: describe the handoff and suggested launch command on stderr.
@@ -311,7 +315,11 @@ asmith merge ~/code/api ~/code/web 10b72094 \
   use their prepared directory unless `import --cwd` recorded another workspace.
 
 Launch uses the selected CLI's YOLO mode and starts a new native session; it never
-fabricates private session-store records.
+fabricates private session-store records. It remains a thin generic launcher:
+import/merge ingestion, review, and snapshot policies come from the generated
+`HANDOFF.md`, not from `launch`. For an arbitrary document, `launch` adds only the
+instruction to read and follow that file. Its sole prepared-manifest behavior is
+selecting `launch_cwd`.
 
 `asmith snapshot PATH… -o RECEIPT`
 
@@ -528,10 +536,12 @@ asmith launch claude ./design/next-steps.md --cwd ~/code/project
 ```
 
 A prepared directory and its printed `HANDOFF.md` are interchangeable launch inputs.
-Prepared continuations carry their working directory in the manifest; `--cwd`
-overrides it and selects the workspace for standalone files. `launch` does not inject
-an ingestion or migration policy into arbitrary documents; it only tells the selected
-agent to read and follow the supplied handoff.
+Prepared manifests keep all original paths in `source_cwds` and one execution path in
+`launch_cwd`. `launch --cwd` always overrides it. If the recorded `launch_cwd` has
+disappeared since preparation, `launch` warns and uses the current directory.
+Standalone files use the current directory unless overridden. `launch` does not
+inject an ingestion or migration policy into arbitrary documents; it only tells the
+selected agent to read and follow the supplied handoff.
 
 ## Shredding sessions (`asmith rm`)
 

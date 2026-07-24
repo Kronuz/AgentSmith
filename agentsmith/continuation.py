@@ -234,7 +234,8 @@ def _render_dump(path: Path, harness: str, messages: list[Msg]) -> str:
 
 def prepare_continuation(
     sources: list[Path],
-    cwd: Path,
+    launch_cwd: Path,
+    source_cwds: list[Path],
     destination: Path | None = None,
     source_harness: str | None = None,
 ) -> ContinuationResult:
@@ -327,9 +328,15 @@ def prepare_continuation(
             )
 
         handoff = staging / "HANDOFF.md"
+        source_cwd_lines = (
+            "\n".join(f"  - `{path}`" for path in source_cwds)
+            if source_cwds
+            else "  - _(not recorded by the source)_"
+        )
         header = (
             "# AgentSmith continuation handoff\n\n"
-            f"- Working directory: `{cwd.expanduser().resolve()}`\n"
+            f"- Launch working directory: `{launch_cwd.expanduser().resolve()}`\n"
+            f"- Original working directories:\n{source_cwd_lines}\n"
             f"- Sources: {len(sources)}\n"
             f"- Recovered sessions: {session_count}\n\n"
             "This handoff is agent-neutral. Launch it with "
@@ -345,9 +352,10 @@ def prepare_continuation(
         handoff.write_text(header + "\n\n---\n\n".join(conversations) + "\n")
         manifest = {
             "schema": "agentsmith-continuation",
-            "schema_version": 1,
+            "schema_version": 2,
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "cwd": str(cwd.expanduser().resolve()),
+            "launch_cwd": str(launch_cwd.expanduser().resolve()),
+            "source_cwds": [str(path) for path in source_cwds],
             "handoff": "HANDOFF.md",
             "sources": source_records,
             "sessions": session_count,
@@ -606,9 +614,10 @@ def prepare_global_import(
         handoff.write_text("\n".join(lines) + "\n")
         staged_manifest = {
             "schema": "agentsmith-global-import",
-            "schema_version": 1,
+            "schema_version": 2,
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "cwd": str(cwd.expanduser().resolve()) if cwd else None,
+            "launch_cwd": str(cwd.expanduser().resolve()) if cwd else str(root),
+            "source_cwds": list[str](),
             "source": "source",
             "candidate": "candidate",
             "files": len(entries),

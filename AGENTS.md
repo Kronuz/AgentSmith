@@ -93,6 +93,11 @@ It also requires a durable change receipt: enumerate exact live targets, run
 `snapshot` after approval and before writes, then `audit --seal`. Broad home/root
 targets are refused. `rollback` verifies all baseline copies before changing
 anything, restores pre-existing targets, and removes tracked targets newly created.
+Continuation manifests deliberately separate provenance (`source_cwds`, every
+original directory) from execution (`launch_cwd`, exactly one). One source cwd is
+inferred; multiple source cwds require `--cwd`; sources with no cwd metadata use the
+current directory with a warning. `launch --cwd` wins. A missing recorded
+`launch_cwd` warns and falls back to the current directory.
 
 Usage summaries are cached per session under `~/.cache/asmith/usage/`, keyed by
 the native artifacts' paths, mtimes, and sizes. Both usage and Claude index caches

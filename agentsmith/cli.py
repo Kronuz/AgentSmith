@@ -638,6 +638,55 @@ def cmd_export_global(args: argparse.Namespace) -> None:
     )
 
 
+def _bundle_source_cwds(sources: list[str]) -> list[Path]:
+    """Collect distinct original cwd values preserved by portable bundles."""
+    found: set[Path] = set()
+    for value in sources:
+        source = Path(value).expanduser()
+        if not source.is_dir():
+            continue
+        try:
+            manifest = json.loads((source / "manifest.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if manifest.get("schema") != "agentsmith-export":
+            continue
+        sessions = manifest.get("sessions")
+        if not isinstance(sessions, list):
+            continue
+        for session in sessions:
+            if not isinstance(session, dict) or not isinstance(session.get("cwd"), str):
+                continue
+            found.add(Path(session["cwd"]).expanduser().resolve())
+    return sorted(found)
+
+
+def _select_launch_cwd(explicit: str | None, source_cwds: list[Path]) -> Path:
+    if explicit:
+        selected = Path(explicit).expanduser().resolve()
+    elif len(source_cwds) == 1:
+        selected = source_cwds[0]
+    elif len(source_cwds) > 1:
+        examples = ", ".join(str(path) for path in source_cwds[:3])
+        suffix = " …" if len(source_cwds) > 3 else ""
+        die(
+            "sources span multiple working directories; pass --cwd to select the "
+            f"single launch workspace ({examples}{suffix})"
+        )
+    else:
+        selected = Path.cwd().resolve()
+        print(
+            yellow(
+                "warning: sources contain no working-directory metadata; "
+                f"launch cwd defaults to {selected} (override with --cwd)"
+            ),
+            file=sys.stderr,
+        )
+    if not selected.is_dir():
+        die(f"launch working directory does not exist: {selected}; map it with --cwd")
+    return selected
+
+
 def cmd_merge(args: argparse.Namespace) -> None:
     """Normalize matching live sessions into one prepared continuation."""
     backends = select_backends(args.harness)
@@ -662,10 +711,8 @@ def cmd_merge(args: argparse.Namespace) -> None:
     session_cwds = {
         Path(pair[1].cwd).expanduser().resolve() for pair in pairs if pair[1].cwd
     }
-    inferred_cwd = next(iter(session_cwds)) if len(session_cwds) == 1 else Path.cwd()
-    cwd = Path(args.cwd).expanduser().resolve() if args.cwd else inferred_cwd
-    if not cwd.is_dir():
-        die(f"working directory does not exist: {cwd}")
+    source_cwds = sorted(session_cwds)
+    cwd = _select_launch_cwd(args.cwd, source_cwds)
     with tempfile.TemporaryDirectory(prefix="asmith-merge-") as temporary:
         bundle = Path(temporary) / "bundle"
         try:
@@ -681,6 +728,7 @@ def cmd_merge(args: argparse.Namespace) -> None:
             result = prepare_continuation(
                 [bundle],
                 cwd,
+                source_cwds,
                 Path(args.out) if args.out else None,
             )
         except (FileExistsError, FileNotFoundError, ValueError, OSError) as exc:
@@ -692,14 +740,6 @@ def cmd_merge(args: argparse.Namespace) -> None:
             f"merged {result.sessions} session(s) into continuation at {result.root}"
         ),
     )
-    if len(session_cwds) > 1 and not args.cwd:
-        print(
-            yellow(
-                "warning: merged sessions span multiple working directories; "
-                f"handoff cwd defaults to {cwd} (override with --cwd)"
-            ),
-            file=sys.stderr,
-        )
     for warning in result.warnings:
         print(yellow(f"warning: {warning}"), file=sys.stderr)
 
@@ -732,13 +772,13 @@ def cmd_import(args: argparse.Namespace) -> None:
         args.bundle = args.sources[0]
         cmd_import_global(args)
         return
-    cwd = Path(args.cwd or ".").expanduser().resolve()
-    if not cwd.is_dir():
-        die(f"working directory does not exist: {cwd}")
+    source_cwds = _bundle_source_cwds(args.sources)
+    cwd = _select_launch_cwd(args.cwd, source_cwds)
     try:
         result = prepare_continuation(
             [Path(source) for source in args.sources],
             cwd,
+            source_cwds,
             Path(args.out) if args.out else None,
             args.source_harness,
         )
@@ -757,11 +797,14 @@ def cmd_import(args: argparse.Namespace) -> None:
 
 
 def cmd_import_global(args: argparse.Namespace) -> None:
+    cwd = Path(args.cwd).expanduser().resolve() if args.cwd else None
+    if cwd is not None and not cwd.is_dir():
+        die(f"launch working directory does not exist: {cwd}")
     try:
         result = prepare_global_import(
             Path(args.bundle),
             Path(args.out) if args.out else None,
-            Path(args.cwd) if args.cwd else None,
+            cwd,
         )
     except (FileExistsError, FileNotFoundError, ValueError, OSError) as exc:
         die(str(exc))
@@ -772,6 +815,33 @@ def cmd_import_global(args: argparse.Namespace) -> None:
             f"staged {result.files} global agent configuration file(s) at {result.root}"
         ),
     )
+
+
+def _prepared_launch_cwd(
+    override: str | None,
+    recorded: object,
+    default: Path,
+) -> Path:
+    """Resolve a launch cwd; only a missing recorded path falls back to current."""
+    if override:
+        cwd = Path(override).expanduser().resolve()
+        if not cwd.is_dir():
+            die(f"working directory does not exist: {cwd}")
+        return cwd
+    if isinstance(recorded, str):
+        cwd = Path(recorded).expanduser().resolve()
+        if cwd.is_dir():
+            return cwd
+        fallback = Path.cwd().resolve()
+        print(
+            yellow(
+                f"warning: recorded launch cwd is missing: {cwd}; "
+                f"using current directory: {fallback}"
+            ),
+            file=sys.stderr,
+        )
+        return fallback
+    return default
 
 
 def cmd_launch(args: argparse.Namespace) -> None:
@@ -790,28 +860,14 @@ def cmd_launch(args: argparse.Namespace) -> None:
     schema = manifest.get("schema")
     if schema == "agentsmith-global-import":
         result = GlobalImportResult(root, handoff, int(manifest.get("files", 0)))
-        cwd_value = manifest.get("cwd")
-        cwd = (
-            Path(args.cwd).expanduser().resolve()
-            if args.cwd
-            else Path(cwd_value).expanduser().resolve()
-            if isinstance(cwd_value, str)
-            else root
-        )
-        if not cwd.is_dir():
-            die(f"working directory does not exist: {cwd}")
+        cwd = _prepared_launch_cwd(args.cwd, manifest.get("launch_cwd"), root)
         command = global_launch_command(result, args.agent, cwd)
     elif schema == "agentsmith-continuation":
-        cwd_value = manifest.get("cwd")
-        cwd = (
-            Path(args.cwd).expanduser().resolve()
-            if args.cwd
-            else Path(cwd_value)
-            if isinstance(cwd_value, str)
-            else Path.cwd()
+        cwd = _prepared_launch_cwd(
+            args.cwd,
+            manifest.get("launch_cwd"),
+            Path.cwd().resolve(),
         )
-        if not cwd.is_dir():
-            die(f"prepared continuation working directory is missing: {cwd}")
         result2 = ContinuationResult(
             root,
             handoff,
@@ -823,11 +879,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
         )
         command = launch_command(result2, args.agent, cwd)
     else:
-        cwd = (
-            Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd().resolve()
-        )
-        if not cwd.is_dir():
-            die(f"working directory does not exist: {cwd}")
+        cwd = _prepared_launch_cwd(args.cwd, None, Path.cwd().resolve())
         try:
             command = handoff_launch_command(handoff, args.agent, cwd)
         except ValueError as exc:
@@ -1866,8 +1918,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--cwd",
         help=(
-            "workspace recorded for later launch (default: current directory for "
-            "project imports; prepared directory for global imports)"
+            "launch workspace (inferred from one source cwd; required for multiple; "
+            "global imports default to the prepared directory)"
         ),
     )
     sp.add_argument(
@@ -1992,7 +2044,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument(
         "--cwd",
-        help="workspace recorded for later launch (default: shared session cwd or cwd)",
+        help="launch workspace (inferred from one source cwd; required for multiple)",
     )
     sp.add_argument(
         "-o",

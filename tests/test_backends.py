@@ -433,6 +433,10 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("Required ingestion protocol", handoff)
         self.assertIn("hello there", handoff)
         self.assertTrue((prepared / "sources" / "001-bundle-import").is_dir())
+        prepared_manifest = json.loads((prepared / "manifest.json").read_text())
+        self.assertEqual(prepared_manifest["launch_cwd"], str(self.cwd.resolve()))
+        self.assertEqual(prepared_manifest["source_cwds"], [str(self.cwd.resolve())])
+        self.assertNotIn("cwd", prepared_manifest)
 
         raw = (
             Path(self.env["CLAUDE_HOME"])
@@ -635,6 +639,16 @@ class BackendFixturesTest(unittest.TestCase):
             str(global_staging / "HANDOFF.md"),
         )
         self.assertIn(f"-C {global_staging.resolve()}", launched_default.stdout)
+        staged_manifest = json.loads((global_staging / "manifest.json").read_text())
+        staged_manifest["launch_cwd"] = str(self.root / "missing-workspace")
+        (global_staging / "manifest.json").write_text(json.dumps(staged_manifest))
+        launched_fallback = self.run_cli(
+            "launch",
+            "codex",
+            str(global_staging / "HANDOFF.md"),
+        )
+        self.assertIn(f"-C {ROOT}", launched_fallback.stdout)
+        self.assertIn("recorded launch cwd is missing", launched_fallback.stderr)
         import_help = self.run_cli("import", "--help")
         self.assertNotIn("--harness", import_help.stdout)
         self.assertNotIn("--to", import_help.stdout)
@@ -761,6 +775,26 @@ class BackendFixturesTest(unittest.TestCase):
         multi_manifest = json.loads((multi / "manifest.json").read_text())
         roots = {entry["project_root"] for entry in multi_manifest["environment"]}
         self.assertEqual(roots, {str(self.cwd.resolve()), str(other.resolve())})
+        ambiguous = self.run_cli("import", str(multi), check=False)
+        self.assertNotEqual(ambiguous.returncode, 0)
+        self.assertIn("sources span multiple working directories", ambiguous.stderr)
+        multi_prepared = self.root / "multi-project-import"
+        self.run_cli(
+            "import",
+            str(multi),
+            "--cwd",
+            str(self.cwd),
+            "-o",
+            str(multi_prepared),
+        )
+        continuation_manifest = json.loads(
+            (multi_prepared / "manifest.json").read_text()
+        )
+        self.assertEqual(continuation_manifest["launch_cwd"], str(self.cwd.resolve()))
+        self.assertEqual(
+            set(continuation_manifest["source_cwds"]),
+            {str(self.cwd.resolve()), str(other.resolve())},
+        )
 
     def test_merge_prepares_all_live_sessions_without_modifying_them(self) -> None:
         destination = self.root / "merged"
