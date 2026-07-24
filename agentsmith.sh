@@ -27,7 +27,7 @@ _asmith_py() { PYTHONPATH="$_ASMITH_DIR${PYTHONPATH:+:$PYTHONPATH}" "$ASMITH_PYT
 asmith() {
   local cmd="${1:-help}"
   case "$cmd" in
-    resume|r)
+    resume)
       shift
       local h="${1:-}"
       case "$h" in
@@ -46,10 +46,9 @@ asmith() {
         printf 'asmith: directory does not exist: %s\n' "$dir" >&2
         return 1
       fi
-      local out id
-      out="$(_asmith_py resolve -H "$h" --resumable --with-harness --exact "$dir")" || return 1
-      [ -z "$out" ] && return 1
-      id="${out#*$'\t'}"
+      local id
+      id="$(_asmith_py resolve -H "$h" --resumable --exact "$dir")" || return 1
+      [ -z "$id" ] && return 1
       printf 'asmith: resuming %s session %s\n' "$h" "${id%%-*}" >&2
       case "$h" in
         copilot) command copilot --resume="$id" --yolo ;;
@@ -86,7 +85,7 @@ EOF
 copilot() {
   if [ $# -eq 0 ]; then
     local id
-    id="$(_asmith_py find --one --resumable --exact -H copilot . 2>/dev/null)"
+    id="$(_asmith_py resolve --resumable --exact -H copilot . 2>/dev/null)"
     command copilot ${id:+--resume="$id"} --yolo
   else
     command copilot "$@"
@@ -96,7 +95,7 @@ copilot() {
 claude() {
   if [ $# -eq 0 ]; then
     local id
-    id="$(_asmith_py find --one --resumable --exact -H claude . 2>/dev/null)"
+    id="$(_asmith_py resolve --resumable --exact -H claude . 2>/dev/null)"
     command claude ${id:+--resume "$id"}
   else
     command claude "$@"
@@ -106,7 +105,7 @@ claude() {
 codex() {
   if [ $# -eq 0 ]; then
     local id
-    id="$(_asmith_py find --one --resumable --exact -H codex . 2>/dev/null)"
+    id="$(_asmith_py resolve --resumable --exact -H codex . 2>/dev/null)"
     if [ -n "$id" ]; then
       command codex resume "$id" --dangerously-bypass-approvals-and-sandbox
     else
@@ -117,13 +116,6 @@ codex() {
   fi
 }
 
-# Convenience aliases (safe no-ops if you prefer just `asmith`).
-alias asls='asmith list'
-alias astree='asmith tree'
-alias asdirs='asmith dirs'
-alias asfind='asmith find'
-alias asdump='asmith dump'
-
 # Tab-completion for `asmith` (bash + zsh). The candidates are computed by the CLI
 # itself (`asmith __complete`, which introspects the argparse parser), so this hook is
 # tiny and never drifts. No python runs until you actually press <Tab>. The same
@@ -131,7 +123,7 @@ alias asdump='asmith dump'
 if [ -n "${ZSH_VERSION:-}" ]; then
   _asmith_complete() {
     local -a lines; local l
-    if [[ ${words[2]:-} == resume || ${words[2]:-} == r ]]; then
+    if [[ ${words[2]:-} == resume ]]; then
       if (( CURRENT == 3 )); then
         compadd -- copilot claude codex
       else
@@ -165,7 +157,7 @@ elif [ -n "${BASH_VERSION:-}" ]; then
   if command -v complete >/dev/null 2>&1; then
     _asmith_complete() {
       local cur="${COMP_WORDS[COMP_CWORD]}" out
-      if [[ "${COMP_WORDS[1]:-}" == resume || "${COMP_WORDS[1]:-}" == r ]]; then
+      if [[ "${COMP_WORDS[1]:-}" == resume ]]; then
         if [ "$COMP_CWORD" -eq 2 ]; then
           COMPREPLY=($(compgen -W "copilot claude codex" -- "$cur"))
         else

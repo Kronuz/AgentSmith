@@ -72,7 +72,7 @@ class BackendFixturesTest(unittest.TestCase):
                 "-c",
                 (
                     'source "$ASMITH_SCRIPT"; '
-                    "_asmith_py() { printf 'codex\\t77777777-7777-7777-7777-777777777777\\n'; }; "
+                    "_asmith_py() { printf '77777777-7777-7777-7777-777777777777\\n'; }; "
                     'asmith resume codex "$TEST_RESUME_DIR"'
                 ),
             ],
@@ -336,7 +336,6 @@ class BackendFixturesTest(unittest.TestCase):
         result = self.run_cli(
             "export",
             str(self.cwd),
-            "--include-memory",
             "-o",
             str(destination),
         )
@@ -457,7 +456,6 @@ class BackendFixturesTest(unittest.TestCase):
         self.run_cli(
             "export",
             str(self.cwd),
-            "--include-project-context",
             "-o",
             str(bundle),
         )
@@ -569,15 +567,32 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertNotIn("==SUPPRESS==", top_help.stdout)
         self.assertNotIn("export-global", top_help.stdout)
         self.assertNotIn("import-global", top_help.stdout)
+        self.assertNotIn("    recent ", top_help.stdout)
+        self.assertNotIn("    ids ", top_help.stdout)
+        self.assertNotIn("    checkpoints (cp)", top_help.stdout)
+        self.assertNotIn("    rm (prune)", top_help.stdout)
         ordered_commands = (
             "    list (ls)",
             "    show ",
             "    export ",
             "    redact ",
-            "    ids ",
+            "    completion ",
         )
         positions = [top_help.stdout.index(command) for command in ordered_commands]
         self.assertEqual(positions, sorted(positions))
+        verify_help = self.run_cli("verify", "--help")
+        self.assertNotIn("--harness", verify_help.stdout)
+        find_help = self.run_cli("find", "--help")
+        self.assertNotIn("--one", find_help.stdout)
+        self.assertNotIn("--with-harness", find_help.stdout)
+        conflicting_roles = self.run_cli(
+            "dump",
+            "33333333",
+            "--user-only",
+            "--assistant-only",
+            check=False,
+        )
+        self.assertNotEqual(conflicting_roles.returncode, 0)
         old_launch = self.run_cli(
             "launch",
             str(global_staging),

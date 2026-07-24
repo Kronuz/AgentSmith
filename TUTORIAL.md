@@ -37,7 +37,7 @@ bundles/dumps ─ import ──┘
 ## 1. The five you'll use daily
 
 ```console
-$ asmith recent            # what was I just working on, across all agents?
+$ asmith ls -n 15          # what was I just working on, across all agents?
 $ asmith ls --here         # sessions for the current directory
 $ asmith tree              # everything grouped by directory
 $ asmith resume codex      # reopen the newest Codex session for this dir
@@ -115,10 +115,9 @@ $ copilot -p "quick question"  # arguments? straight through to the real CLI
 Script-friendly lookup:
 
 ```console
-$ asmith find --one --resumable --exact .        # print just the newest id for cwd
+$ asmith resolve --resumable --exact .           # print newest full id for cwd
 413fc324-d31f-4b69-8519-e92c1d917278
-$ asmith find --one --with-harness --resumable . # "harness<TAB>id" for scripts
-copilot	413fc324-d31f-4b69-8519-e92c1d917278
+$ asmith find --resumable --exact .              # list all resumable sessions for cwd
 ```
 
 ---
@@ -558,11 +557,11 @@ owns the id automatically — you never qualify it.
 ## 9. Power tips
 
 - **Pipe it.** Color auto-disables when output isn't a terminal, so
-  `asmith dump . | less`, `asmith ls | grep KronuzBlog`, and `asmith find --one . | pbcopy`
+  `asmith dump . | less`, `asmith ls | grep KronuzBlog`, and `asmith resolve . | pbcopy`
   all Just Work. Force plain text anytime with `NO_COLOR=1`.
 - **Jump into a session's files.** `asmith cd <id>` drops you into its on-disk state
   dir; `asmith path <id>` just prints it.
-- **Scripting.** `asmith find --one --resumable --exact .` is the exact resolver the
+- **Scripting.** `asmith resolve --resumable --exact .` is the exact resolver the
   `copilot()` wrapper uses — handy in your own scripts.
 - **Point it at a sandbox.** Every store path is an env override
   (`COPILOT_HOME`, `COPILOT_DB`, `COPILOT_STATE`, `CLAUDE_HOME`, `CODEX_HOME`,
@@ -578,7 +577,7 @@ owns the id automatically — you never qualify it.
 
 | Want to… | Run |
 | --- | --- |
-| See recent work | `asmith recent` |
+| See recent work | `asmith ls -n 15` |
 | List every session | `asmith ls` (path + name per row) |
 | List a dir's sessions | `asmith ls --here` |
 | Group sessions by dir / agent | `asmith tree` · `asmith tree --by agent` |

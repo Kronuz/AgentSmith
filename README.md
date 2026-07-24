@@ -57,9 +57,9 @@ source <(asmith completion zsh)
 
 ## Picking a harness
 
-Every command takes `-H/--harness {copilot,claude,codex,all}` (default: **all**).
-Aggregate commands (`list`, `dirs`, `search`, `stats`, `usage` leaderboard) merge
-all three. `list` and `recent` always show the full harness name; compact views
+Commands that read agent stores take `-H/--harness {copilot,claude,codex,all}`
+(default: **all**). Aggregate commands (`list`, `dirs`, `search`, `stats`, `usage`
+leaderboard) merge all three. `list` always shows the full harness name; compact views
 use `co` (copilot), `cl` (claude), or `cx` (codex). Session
 commands auto-detect which harness owns an id (UUIDs never collide).
 
@@ -115,8 +115,8 @@ the full id).
 | `asmith list` (`ls`) | List **all** sessions (path + name, newest first). `-S/--sort date\|agent\|id\|turns\|name\|dir`, `-r`, `-d DIR`, `--here`, `--repo`, `-g GREP`, `-n N`. |
 | `asmith tree` | Sessions grouped **by directory** (or `--by agent`), each as a one-liner. `-S/--sort`, `-r`, `--resumable`. |
 | `asmith dirs` | Directories that have sessions (columns explained in `asmith dirs --help`). `--by-count`. |
-| `asmith find [dir]` | Sessions for a directory. `-1` prints the newest id; `--with-harness`, `--resumable`, `--exact`. |
-| `asmith resolve [id/prefix/path]` | Resolve a unique id prefix or path to one **full** session id (`--resumable`, `--with-harness`). |
+| `asmith find [DIR]` | List sessions for a directory. `--resumable`, `--exact`. |
+| `asmith resolve [ID/PREFIX/PATH]` | Resolve a unique id prefix or path to one **full** session id (`--resumable`, `--exact`). |
 | `asmith show <session>` | Metadata: cwd, repo/branch, times, turns, files, tokens/AIU, checkpoints, resume line. |
 | `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
 | `asmith export [TARGET…] -o BUNDLE` | Export sessions/projects, defaulting to the current project. An exact agent-home target such as `~/.codex` exports that agent's globals; `--global` exports all globals. |
@@ -128,16 +128,14 @@ the full id).
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
 | `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under all harness homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
 | `asmith files <session>` | File touches recorded or inferred from tool calls, including distinguishable subagents by default (not a workspace snapshot). `--main-only` excludes them. |
-| `asmith checkpoints <session>` (`cp`) | Checkpoints (copilot only). `-v` for next steps. |
+| `asmith checkpoints <session>` | Checkpoints (copilot only). `-v` for next steps. |
 | `asmith usage [session]` | Per-model fresh input/output/cache/reasoning + AIU, including distinguishable subagents by default, or a leaderboard ranked by estimated **wtc**. `--main-only` excludes them. |
-| `asmith recent [-n N]` | Most recent sessions across all directories. |
 | `asmith path [session]` | Print the on-disk location (default: session for cwd). |
 | `asmith stats` | Per-harness totals (sessions, resumable, dirs, span). `--usage` adds AIU. |
-| `asmith rm <id/path…>` (`prune`) | **Shred local state** for session(s). Path targets are exact unless `--recursive` is explicit. `-y`, `--dry-run`, `-v`, `--aggressive`. |
+| `asmith rm <id/path…>` | **Shred local state** for session(s). Path targets are exact unless `--recursive` is explicit. `-y`, `--dry-run`, `-v`, `--aggressive`. |
 | `asmith purge` | Shred all **empty** sessions (no transcript, 0 turns). `-y`, `--dry-run`, `-v`, `-H`. |
 | `asmith resume AGENT [DIR]` | Resume the selected agent's newest resumable session for `DIR` (default: current directory). |
 | `asmith cd [session]` | `cd` into a session's on-disk location (shell). |
-| `asmith ids` | Print session ids, one per line (scripting / completion). `--full` for full uuids. |
 | `asmith completion <bash\|zsh>` | Print the tab-completion script for your shell. |
 
 ## Complete option reference
@@ -179,21 +177,13 @@ asmith ls -H codex -g agentsmith -n 20
 
 `asmith find [DIR]`
 
-- `-1/--one`: print only the newest matching id.
-- `--with-harness`: with `--one`, print `harness<TAB>id`.
 - `--resumable`: require an on-disk resumable session.
 - `--exact`: match only the exact cwd; otherwise nested paths may match.
 
 `asmith resolve [TARGET]`
 
 - `--resumable`: require a resumable result.
-- `--with-harness`: print `harness<TAB>id`.
 - `--exact`: exact cwd matching for path targets.
-
-`asmith recent`
-
-- `-S/--sort`, `-r/--reverse`: choose and reverse the sort.
-- `-n/--number N`: maximum sessions; default 15.
 
 ### Inspect and analyze
 
@@ -224,7 +214,7 @@ repository, timestamps, turns, usage, files, checkpoints, and the native resume 
 
 - `--main-only`: exclude file touches attributed to distinguishable subagents.
 
-`asmith checkpoints SESSION` / `asmith cp SESSION`
+`asmith checkpoints SESSION`
 
 - `-v/--verbose`: include checkpoint next steps. Checkpoints are currently native
   to Copilot sessions.
@@ -273,8 +263,6 @@ asmith export --global -o ~/exports/globals
 - `--from copilot|claude|codex`: resolve an ambiguous native dump dialect.
 - `--cwd PROJECT`: workspace recorded in a project/session handoff; default current
   directory.
-- `--global`: explicitly require global-configuration import mode; normally inferred
-  from the bundle schema.
 - `-o/--out PREPARED`: new review directory; otherwise use the XDG state directory.
 
 `asmith merge [TARGET…] [-o PREPARED]`
@@ -321,7 +309,7 @@ fabricates private session-store records.
 - `-m/--max-count N`: dry-run match limit; ignored during real redaction so a secret
   is never partially scrubbed.
 
-`asmith rm SESSION…` / `asmith prune SESSION…`
+`asmith rm SESSION…`
 
 - Accepts full ids, unique id prefixes, or exact project paths.
 - `--recursive`: for path targets, also select sessions in nested directories.
@@ -337,8 +325,6 @@ fabricates private session-store records.
 
 ### Shell and scripting
 
-`asmith ids [--full]` prints short ids by default; `--full` prints full UUIDs.
-
 `asmith completion bash|zsh` prints the completion program to source from the shell.
 The sourced `agentsmith.sh` also provides `asmith resume` and `asmith cd`, which must
 run in the calling shell to launch interactively or change its directory:
@@ -353,7 +339,7 @@ asmith resume claude ~/code/project # newest Claude session for DIR
 Sourcing the file defines all three. Bare `copilot`, `claude`, or `codex` resumes the newest
 resumable session whose cwd exactly matches the current directory; with no match
 it starts fresh. Any arguments pass straight through to the real CLI. They resolve
-via `asmith find --one --resumable --exact -H <harness> .`. `copilot()` replaces the
+via `asmith resolve --resumable --exact -H <harness> .`. `copilot()` replaces the
 inline function that used to live in `~/.profile`. Codex starts and resumes in
 full bypass (“YOLO”) mode.
 

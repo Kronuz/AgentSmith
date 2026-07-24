@@ -272,17 +272,9 @@ def cmd_find(args: argparse.Namespace) -> None:
             pairs.append((b, s))
     pairs.sort(key=lambda bs: parse_ts(bs[1].updated_at), reverse=True)
     if not pairs:
-        if not args.one:
-            kind = "resumable " if args.resumable else ""
-            print(dim(f"(no {kind}session for {real(args.dir)})"), file=sys.stderr)
+        kind = "resumable " if args.resumable else ""
+        print(dim(f"(no {kind}session for {real(args.dir)})"), file=sys.stderr)
         raise SystemExit(1)
-    if args.one:
-        b, s = pairs[0]
-        if args.with_harness:
-            print(f"{s.harness}\t{s.id}")
-        else:
-            print(s.id)
-        return
     multi = len(backends) > 1
     cols = _term_cols()
     for b, s in pairs:
@@ -299,7 +291,7 @@ def cmd_resolve(args: argparse.Namespace) -> None:
     _b, s = resolve(backends, args.target, resumable=args.resumable, exact=args.exact)
     if args.resumable and not s.resumable:
         die(f"session {short(s.id)} is not resumable (no on-disk transcript)")
-    print(f"{s.harness}\t{s.id}" if args.with_harness else s.id)
+    print(s.id)
 
 
 def cmd_show(args: argparse.Namespace) -> None:
@@ -708,11 +700,7 @@ def cmd_import(args: argparse.Namespace) -> None:
             )
         except (OSError, json.JSONDecodeError):
             pass
-    if args.global_scope or inferred_global:
-        if len(args.sources) != 1:
-            die("import --global takes exactly one global export bundle")
-        if args.source_harness:
-            die("import --global cannot be combined with --from")
+    if inferred_global:
         args.bundle = args.sources[0]
         cmd_import_global(args)
         return
@@ -961,23 +949,9 @@ def cmd_usage(args: argparse.Namespace) -> None:
     )
 
 
-def cmd_recent(args: argparse.Namespace) -> None:
-    args.here = False
-    args.dir = None
-    args.repo = None
-    args.grep = None
-    cmd_list(args)
-
-
-def cmd_ids(args: argparse.Namespace) -> None:
-    backends = select_backends(args.harness)
-    for s in all_sessions(backends):
-        print(s.id if args.full else short(s.id))
-
-
 # Shell-only subcommands (handled by the asmith() wrapper, absent from this parser) and
 # the kind of positional each completes: "ids", "dirs", or "both".
-_SHELL_COMMANDS = {"resume": "both", "r": "both", "cd": "ids"}
+_SHELL_COMMANDS = {"resume": "both", "cd": "ids"}
 _DIRS_SENTINEL = "__DIRS__"  # the shell expands this line to directory names
 
 
@@ -1469,7 +1443,6 @@ def _order_subcommand_help(parser: argparse.ArgumentParser) -> None:
         "dirs",
         "find",
         "resolve",
-        "recent",
         "show",
         "dump",
         "search",
@@ -1487,7 +1460,6 @@ def _order_subcommand_help(parser: argparse.ArgumentParser) -> None:
         "redact",
         "rm",
         "purge",
-        "ids",
         "completion",
     )
     ranks = {name: index for index, name in enumerate(order)}
@@ -1505,7 +1477,13 @@ def _order_subcommand_help(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    common = argparse.ArgumentParser(add_help=False)
+    output = argparse.ArgumentParser(add_help=False)
+    output.add_argument(
+        "--no-color",
+        action="store_true",
+        help="disable ANSI color (also honored via the NO_COLOR env var)",
+    )
+    common = argparse.ArgumentParser(add_help=False, parents=[output])
     common.add_argument(
         "-H",
         "--harness",
@@ -1513,12 +1491,6 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="which agent's sessions to use (default: all)",
     )
-    common.add_argument(
-        "--no-color",
-        action="store_true",
-        help="disable ANSI color (also honored via the NO_COLOR env var)",
-    )
-
     p = argparse.ArgumentParser(
         prog="asmith",
         description="Swiss-army knife for AI coding-agent sessions.",
@@ -1618,10 +1590,6 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("dir", nargs="?", default=".", help="directory (default: cwd)"),
         "dirs",
     )
-    sp.add_argument("-1", "--one", action="store_true", help="print only the newest id")
-    sp.add_argument(
-        "--with-harness", action="store_true", help="with --one, print 'harness<TAB>id'"
-    )
     sp.add_argument("--resumable", action="store_true", help="only resumable sessions")
     sp.add_argument("--exact", action="store_true", help="exact cwd match only")
     sp.set_defaults(func=cmd_find)
@@ -1644,9 +1612,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--resumable",
         action="store_true",
         help="require an on-disk (resumable) session",
-    )
-    sp.add_argument(
-        "--with-harness", action="store_true", help="print 'harness<TAB>id'"
     )
     sp.add_argument("--exact", action="store_true", help="exact cwd match (path args)")
     sp.set_defaults(func=cmd_resolve)
@@ -1673,8 +1638,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "-R", "--reasoning", action="store_true", help="include reasoning text"
     )
-    sp.add_argument("--user-only", action="store_true", help="only user messages")
-    sp.add_argument(
+    roles = sp.add_mutually_exclusive_group()
+    roles.add_argument("--user-only", action="store_true", help="only user messages")
+    roles.add_argument(
         "--assistant-only", action="store_true", help="only assistant messages"
     )
     sp.add_argument(
@@ -1729,23 +1695,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="for a path, include sessions in nested directories",
     )
-    sp.add_argument(
-        "--include-memory",
-        action="store_true",
-        default=True,
-        help=argparse.SUPPRESS,
-    )
+    sp.set_defaults(include_memory=True, include_project_context=True)
     sp.add_argument(
         "--no-memory",
         dest="include_memory",
         action="store_false",
         help="exclude attributable project-scoped memory",
-    )
-    sp.add_argument(
-        "--include-project-context",
-        action="store_true",
-        default=True,
-        help=argparse.SUPPRESS,
     )
     sp.add_argument(
         "--no-project-context",
@@ -1757,7 +1712,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser(
         "verify",
-        parents=[common],
+        parents=[output],
         help="verify a portable export manifest and every checksum",
     )
     sp.add_argument(
@@ -1769,6 +1724,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser(
         "import",
+        parents=[output],
         help="prepare export bundle(s) or raw dump(s) for another agent",
         description=(
             "Create an agent-neutral, reviewable HANDOFF.md from existing bundles or "
@@ -1777,21 +1733,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     sp.add_argument(
-        "--no-color",
-        action="store_true",
-        help="disable ANSI color (also honored via the NO_COLOR env var)",
-    )
-    sp.add_argument(
         "sources",
         nargs="+",
         metavar="SOURCE",
         help="AgentSmith bundle, native JSONL dump, compressed dump, or archive directory",
-    )
-    sp.add_argument(
-        "--global",
-        dest="global_scope",
-        action="store_true",
-        help="prepare a global configuration bundle for critical review",
     )
     sp.add_argument(
         "--from",
@@ -1814,16 +1759,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser(
         "launch",
+        parents=[output],
         help="launch an agent with a prepared import or any handoff file",
         description=(
             "Launch an agent in YOLO mode with a prepared import directory, its "
             "HANDOFF.md, or any standalone handoff file."
         ),
-    )
-    sp.add_argument(
-        "--no-color",
-        action="store_true",
-        help="disable ANSI color (also honored via the NO_COLOR env var)",
     )
     sp.add_argument(
         "agent",
@@ -1876,23 +1817,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also include sessions in nested working directories",
     )
-    sp.add_argument(
-        "--include-memory",
-        action="store_true",
-        default=True,
-        help=argparse.SUPPRESS,
-    )
+    sp.set_defaults(include_memory=True, include_project_context=True)
     sp.add_argument(
         "--no-memory",
         dest="include_memory",
         action="store_false",
         help="exclude attributable project-scoped memory",
-    )
-    sp.add_argument(
-        "--include-project-context",
-        action="store_true",
-        default=True,
-        help=argparse.SUPPRESS,
     )
     sp.add_argument(
         "--no-project-context",
@@ -1921,9 +1851,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.set_defaults(func=cmd_files)
 
-    sp = sub.add_parser(
-        "checkpoints", aliases=["cp"], parents=[common], help="checkpoints"
-    )
+    sp = sub.add_parser("checkpoints", parents=[common], help="checkpoints")
     _mark(
         sp.add_argument("session", help="full id / unique id prefix / path / ."),
         "ids",
@@ -1960,19 +1888,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_number(sp, 15)
     sp.set_defaults(func=cmd_usage)
-
-    sp = sub.add_parser("recent", parents=[common], help="most recent sessions")
-    add_sort(sp)
-    add_number(sp, 15)
-    sp.set_defaults(func=cmd_recent)
-
-    sp = sub.add_parser(
-        "ids", parents=[common], help="print session ids (scripting / tab-completion)"
-    )
-    sp.add_argument(
-        "--full", action="store_true", help="print full uuids instead of 8-char ids"
-    )
-    sp.set_defaults(func=cmd_ids)
 
     sp = sub.add_parser(
         "completion", help="print the tab-completion script (source it in your shell)"
@@ -2082,9 +1997,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.set_defaults(func=cmd_stats)
 
-    sp = sub.add_parser(
-        "rm", aliases=["prune"], parents=[common], help="fully delete session(s)"
-    )
+    sp = sub.add_parser("rm", parents=[common], help="fully delete session(s)")
     _mark(
         sp.add_argument(
             "sessions",
@@ -2120,7 +2033,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "-v", "--verbose", action="store_true", help="list every path touched"
     )
-    sp.add_argument("--aggressive", action="store_true", help=argparse.SUPPRESS)
+    sp.set_defaults(aggressive=False)
     sp.set_defaults(func=cmd_purge)
 
     _order_subcommand_help(p)
