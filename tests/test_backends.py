@@ -426,7 +426,8 @@ class BackendFixturesTest(unittest.TestCase):
 
         global_bundle = self.root / "global-bundle"
         global_export = self.run_cli(
-            "export-global",
+            "export",
+            "--global",
             "-o",
             str(global_bundle),
         )
@@ -447,7 +448,7 @@ class BackendFixturesTest(unittest.TestCase):
 
         global_staging = self.root / "global-staging"
         global_import = self.run_cli(
-            "import-global",
+            "import",
             str(global_bundle),
             "-o",
             str(global_staging),
@@ -459,6 +460,46 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("explicit user exclusion", import_instructions)
         self.assertTrue((global_staging / "candidate").is_dir())
         self.assertTrue((global_staging / "source").is_dir())
+        fake_bin = self.root / "bin"
+        fake_bin.mkdir()
+        fake_codex = fake_bin / "codex"
+        fake_codex.write_text("#!/bin/sh\nprintf 'fake-codex %s\\n' \"$*\"\n")
+        fake_codex.chmod(0o755)
+        self.env["PATH"] = str(fake_bin) + os.pathsep + self.env.get("PATH", "")
+        launched = self.run_cli(
+            "launch",
+            str(global_staging),
+            "--to",
+            "codex",
+        )
+        self.assertIn("fake-codex", launched.stdout)
+        self.assertIn(str(global_staging / "HANDOFF.md"), launched.stdout)
+        import_help = self.run_cli("import", "--help")
+        self.assertNotIn("--harness", import_help.stdout)
+        self.assertIn("SOURCE", import_help.stdout)
+        self.assertIn("PREPARED", import_help.stdout)
+        launch_help = self.run_cli("launch", "--help")
+        self.assertNotIn("--harness", launch_help.stdout)
+        self.assertIn("PREPARED", launch_help.stdout)
+        export_help = self.run_cli("export", "--help")
+        self.assertIn("TARGET", export_help.stdout)
+        self.assertIn("BUNDLE", export_help.stdout)
+
+        claude_global = self.root / "claude-global"
+        self.run_cli(
+            "export",
+            self.env["CLAUDE_HOME"],
+            "-o",
+            str(claude_global),
+        )
+        claude_manifest = json.loads((claude_global / "manifest.json").read_text())
+        self.assertEqual(claude_manifest["schema"], "agentsmith-global-export")
+        self.assertTrue(
+            all(
+                entry["harness"] in {"claude", "shared"}
+                for entry in claude_manifest["environment"]
+            )
+        )
 
         other = self.root / "other-work"
         other.mkdir()

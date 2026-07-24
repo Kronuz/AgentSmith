@@ -22,7 +22,12 @@ from .backends import (
     resolve,
     select_backends,
 )
+from .backends.claude import CLAUDE_HOME
+from .backends.codex import CODEX_HOME
+from .backends.copilot import COPILOT_HOME
 from .continuation import (
+    ContinuationResult,
+    GlobalImportResult,
     global_launch_command,
     launch_command,
     prepare_continuation,
@@ -526,12 +531,41 @@ def _export_items(pairs: list[tuple[Backend, Session]]) -> list[ExportItem]:
 
 
 def cmd_export(args: argparse.Namespace) -> None:
+    targets: list[str] = args.targets if args.global_scope else args.targets or ["."]
+    global_homes = {
+        real(str(COPILOT_HOME)): "copilot",
+        real(str(CLAUDE_HOME)): "claude",
+        real(str(CODEX_HOME)): "codex",
+    }
+    selected_homes: set[str] = set()
+    ordinary_targets: list[str] = []
+    for target in targets:
+        harness = global_homes.get(real(target)) if looks_like_path(target) else None
+        if harness:
+            selected_homes.add(harness)
+        else:
+            ordinary_targets.append(target)
+    inferred_global = bool(selected_homes)
+    if args.global_scope or inferred_global:
+        if ordinary_targets:
+            die("cannot mix agent-home global targets with sessions/directories")
+        if (
+            selected_homes
+            and args.harness != "all"
+            and selected_homes != {args.harness}
+        ):
+            die("agent-home targets conflict with -H/--harness")
+        if args.recursive:
+            die("export --global cannot be combined with --recursive")
+        args.global_harnesses = selected_homes or None
+        cmd_export_global(args)
+        return
     backends = select_backends(args.harness)
     pairs: list[tuple[Backend, Session]] = []
     project_roots: list[Path] = []
     seen_sessions: set[tuple[str, str]] = set()
     seen_roots: set[Path] = set()
-    for target in args.targets:
+    for target in targets:
         target_pairs, project_root = _export_pairs(backends, target, args.recursive)
         for pair in target_pairs:
             key = (pair[0].name, pair[1].id)
@@ -549,7 +583,7 @@ def cmd_export(args: argparse.Namespace) -> None:
         export_bundle(
             items,
             Path(args.out),
-            target=args.targets,
+            target=targets,
             include_memory=args.include_memory,
             include_project_context=args.include_project_context,
             project_roots=project_roots,
@@ -567,7 +601,8 @@ def cmd_export(args: argparse.Namespace) -> None:
 
 def cmd_export_global(args: argparse.Namespace) -> None:
     try:
-        harnesses = None if args.harness == "all" else {args.harness}
+        selected = getattr(args, "global_harnesses", None)
+        harnesses = selected or (None if args.harness == "all" else {args.harness})
         count = export_global_bundle(Path(args.out), harnesses)
     except (FileExistsError, ValueError, OSError) as exc:
         die(str(exc))
@@ -637,6 +672,26 @@ def cmd_verify(args: argparse.Namespace) -> None:
 
 
 def cmd_import(args: argparse.Namespace) -> None:
+    inferred_global = False
+    if len(args.sources) == 1:
+        candidate = Path(args.sources[0]).expanduser()
+        try:
+            source_manifest = json.loads((candidate / "manifest.json").read_text())
+            inferred_global = (
+                source_manifest.get("schema") == "agentsmith-global-export"
+            )
+        except (OSError, json.JSONDecodeError):
+            pass
+    if args.global_scope or inferred_global:
+        if len(args.sources) != 1:
+            die("import --global takes exactly one global export bundle")
+        if args.source_harness:
+            die("import --global cannot be combined with --from")
+        args.bundle = args.sources[0]
+        cmd_import_global(args)
+        return
+    if not args.to:
+        die("project/session import requires --to copilot|claude|codex")
     cwd = Path(args.cwd).expanduser().resolve()
     if not cwd.is_dir():
         die(f"working directory does not exist: {cwd}")
@@ -694,6 +749,47 @@ def cmd_import_global(args: argparse.Namespace) -> None:
             die(f"destination CLI is not installed or not on PATH: {command[0]}")
         if completed.returncode:
             raise SystemExit(completed.returncode)
+
+
+def cmd_launch(args: argparse.Namespace) -> None:
+    root = Path(args.prepared).expanduser().resolve()
+    try:
+        manifest = json.loads((root / "manifest.json").read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        die(f"cannot read prepared import manifest: {exc}")
+    handoff = root / "HANDOFF.md"
+    if not handoff.is_file():
+        die(f"prepared import has no HANDOFF.md: {root}")
+    schema = manifest.get("schema")
+    if schema == "agentsmith-global-import":
+        result = GlobalImportResult(root, handoff, int(manifest.get("files", 0)))
+        command = global_launch_command(result, args.to)
+        cwd = Path.home()
+    elif schema == "agentsmith-continuation":
+        cwd_value = manifest.get("cwd")
+        cwd = Path(cwd_value) if isinstance(cwd_value, str) else Path.cwd()
+        if not cwd.is_dir():
+            die(f"prepared continuation working directory is missing: {cwd}")
+        result2 = ContinuationResult(
+            root,
+            handoff,
+            len(manifest.get("sources", []))
+            if isinstance(manifest.get("sources"), list)
+            else 0,
+            int(manifest.get("sessions", 0)),
+            [],
+        )
+        command = launch_command(result2, args.to, cwd)
+    else:
+        die(f"not a prepared Agentsmith import: {root}")
+    print(f"handoff: {handoff}")
+    print(dim("launching: " + " ".join(command[:2]) + " …"), file=sys.stderr)
+    try:
+        completed = subprocess.run(command, cwd=cwd, check=False)
+    except FileNotFoundError:
+        die(f"destination CLI is not installed or not on PATH: {command[0]}")
+    if completed.returncode:
+        raise SystemExit(completed.returncode)
 
 
 def cmd_search(args: argparse.Namespace) -> None:
@@ -1534,20 +1630,33 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[common],
         help="export portable session bundle(s) to a new directory",
         description=(
-            "Export an id/prefix as one session, or a path as every session whose "
-            "cwd exactly matches it. --recursive also includes nested cwd paths. "
-            "The destination must not already exist."
+            "Export sessions/projects, defaulting to the current project. An exact "
+            "agent-home target (~/.claude, ~/.copilot, or ~/.codex) selects that "
+            "agent's globals; --global selects all globals. The bundle must be new."
         ),
     )
     _mark(
         sp.add_argument(
             "targets",
-            nargs="+",
-            help="one or more session ids/prefixes or directory paths",
+            nargs="*",
+            metavar="TARGET",
+            help="session id/prefix, project path, or exact agent-home path",
         ),
         "both",
     )
-    sp.add_argument("-o", "--out", required=True, help="new destination DIRECTORY")
+    sp.add_argument(
+        "--global",
+        dest="global_scope",
+        action="store_true",
+        help="export user-wide agent instructions/configuration instead of sessions",
+    )
+    sp.add_argument(
+        "-o",
+        "--out",
+        required=True,
+        metavar="BUNDLE",
+        help="new checksummed export bundle directory",
+    )
     sp.add_argument(
         "--recursive",
         action="store_true",
@@ -1582,14 +1691,20 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser(
         "export-global",
         parents=[common],
-        help="export user-wide agent instructions, hooks, skills, and settings",
+        help=argparse.SUPPRESS,
         description=(
             "Create a separate portable bundle for global Claude/Codex/Copilot "
             "configuration. Authentication and session stores are excluded, but "
             "settings may contain inline secrets. The destination must be new."
         ),
     )
-    sp.add_argument("-o", "--out", required=True, help="new destination DIRECTORY")
+    sp.add_argument(
+        "-o",
+        "--out",
+        required=True,
+        metavar="BUNDLE",
+        help="new checksummed export bundle directory",
+    )
     sp.set_defaults(func=cmd_export_global)
 
     sp = sub.add_parser(
@@ -1597,29 +1712,43 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[common],
         help="verify a portable export manifest and every checksum",
     )
-    sp.add_argument("bundle", help="export DIRECTORY")
+    sp.add_argument(
+        "bundle",
+        metavar="BUNDLE",
+        help="checksummed Agentsmith export bundle",
+    )
     sp.set_defaults(func=cmd_verify)
 
     sp = sub.add_parser(
         "import",
-        parents=[common],
         help="prepare export bundle(s) or raw dump(s) for another agent",
         description=(
-            "Create a reviewable continuation directory containing HANDOFF.md, a "
-            "manifest, and copies of every source. Export bundles are preferred; "
-            "Claude/Codex/Copilot JSONL dumps are accepted as a recovery fallback."
+            "Infer project/global scope from the bundle schema and create a reviewable "
+            "HANDOFF.md. Project/session imports require --to. Global imports create "
+            "an editable candidate tree; --to is needed only when launching."
         ),
+    )
+    sp.add_argument(
+        "--no-color",
+        action="store_true",
+        help="disable ANSI color (also honored via the NO_COLOR env var)",
     )
     sp.add_argument(
         "sources",
         nargs="+",
-        help="Agentsmith export DIRECTORY or native JSONL dump FILE",
+        metavar="SOURCE",
+        help="Agentsmith bundle, native JSONL dump, compressed dump, or archive directory",
     )
     sp.add_argument(
         "--to",
         choices=("copilot", "claude", "codex"),
-        required=True,
-        help="destination agent",
+        help="destination agent (required for project/session import or --launch)",
+    )
+    sp.add_argument(
+        "--global",
+        dest="global_scope",
+        action="store_true",
+        help="prepare a global configuration bundle for critical review",
     )
     sp.add_argument(
         "--from",
@@ -1635,7 +1764,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "-o",
         "--out",
-        help="new continuation DIRECTORY (default: XDG state directory)",
+        metavar="PREPARED",
+        help="new prepared import directory (default: XDG state directory)",
     )
     sp.add_argument(
         "--launch",
@@ -1646,19 +1776,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser(
         "import-global",
-        parents=[common],
-        help="stage a global agent configuration bundle for review",
+        help=argparse.SUPPRESS,
         description=(
             "Prepare a global export on this machine without overwriting live "
             "configuration. HANDOFF.md audits an editable candidate tree and maps "
             "every retained file to its user-home destination."
         ),
     )
-    sp.add_argument("bundle", help="global export DIRECTORY")
+    sp.add_argument(
+        "--no-color",
+        action="store_true",
+        help="disable ANSI color (also honored via the NO_COLOR env var)",
+    )
+    sp.add_argument("bundle", metavar="BUNDLE", help="global export bundle directory")
     sp.add_argument(
         "-o",
         "--out",
-        help="new staging DIRECTORY (default: XDG state directory)",
+        metavar="PREPARED",
+        help="new prepared import directory (default: XDG state directory)",
     )
     sp.add_argument(
         "--to",
@@ -1671,6 +1806,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="launch an agent to audit candidate files (approval required before apply)",
     )
     sp.set_defaults(func=cmd_import_global)
+
+    sp = sub.add_parser(
+        "launch",
+        help="launch an agent against an already-reviewed prepared import",
+    )
+    sp.add_argument(
+        "--no-color",
+        action="store_true",
+        help="disable ANSI color (also honored via the NO_COLOR env var)",
+    )
+    sp.add_argument(
+        "prepared",
+        metavar="PREPARED",
+        help="prepared import directory containing HANDOFF.md",
+    )
+    sp.add_argument(
+        "--to",
+        choices=("copilot", "claude", "codex"),
+        required=True,
+        help="destination agent",
+    )
+    sp.set_defaults(func=cmd_launch)
 
     sp = sub.add_parser(
         "merge",
@@ -1704,7 +1861,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "-o",
         "--out",
-        help="new continuation DIRECTORY (default: XDG state directory)",
+        metavar="PREPARED",
+        help="new prepared continuation directory (default: XDG state directory)",
     )
     sp.add_argument(
         "--recursive",

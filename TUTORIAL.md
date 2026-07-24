@@ -126,44 +126,243 @@ separate files that `asmith dump` merges in — a Claude session can have dozens
 Note the default view is a cleaned reconstruction (system reminders stripped, tool
 results truncated). Use `--raw` when you want the exact underlying file.
 
-For a portable archive, use `asmith export`. Unlike singular `dump`, one or more
-paths export every exact-cwd session. Add `--recursive` for nested cwd paths.
-Native artifacts, memory, and project-scoped agent instructions/hooks/settings/
-skills are included by default; `--no-memory` and `--no-project-context` opt out.
-After copying it to another machine, run `asmith verify <bundle>`.
-
-Global agent configuration has a separate lifecycle:
-
-```console
-$ asmith export-global -o ~/exports/my-agent-config
-$ asmith import-global ~/exports/my-agent-config
-$ asmith import-global ~/exports/my-agent-config --to codex --launch
-```
-
-This prevents global hooks or instructions from being duplicated into every project
-bundle. The import has an untouched `source/`, an editable `candidate/`, and a
-critical-review `HANDOFF.md`. Delete unwanted candidates before launching; deletion
-means exclusion. The agent must flag restrictive or work-specific policy, resolve
-references to omitted files, propose keep/adapt/omit, and ask before applying.
-Authentication stores are excluded, but settings can contain inline secrets.
-
-Prepare an export—or an old native dump—for another agent:
-
-```console
-$ asmith import ~/exports/project-sessions --to codex --cwd ~/code/project
-$ asmith import old-events.jsonl.gz --from copilot --to claude -o ~/handoff
-$ asmith merge . --to codex --launch
-```
-
-The result contains `HANDOFF.md`, `manifest.json`, and copies of the inputs.
-`--launch` starts a fresh native destination session in YOLO mode; it does not edit
-the destination agent's private session database. Raw JSONL/GZ recovery cannot
-restore sidecars that were never saved, and imported environment files are staged
-for review rather than installed automatically.
+`dump --raw` is useful for one exact native transcript. For portable, complete
+archives and cross-agent continuation, use the export/import workflow next.
 
 ---
 
-## 4. Searching
+## 4. Exporting and importing
+
+Agentsmith has two deliberately separate scopes:
+
+- **Project/session bundles** contain conversations, native session artifacts,
+  memory, and project-scoped agent context.
+- **Global bundles** contain user-wide instructions, skills, hooks, and settings.
+
+Both are checksummed exports. Import never fabricates records in an agent's private
+database: it prepares a visible `HANDOFF.md`, and a destination agent creates a new
+native session or critically merges configuration.
+
+### Export one session
+
+Use any full id or unique prefix:
+
+```console
+$ asmith export 10b72094 -o ~/exports/one-session
+exported 1 session(s) to /Users/me/exports/one-session
+$ asmith verify ~/exports/one-session
+verified 1 session(s), 8 checksummed file(s)
+```
+
+The destination must not already exist. A project/session export includes everything
+portable by default:
+
+- normalized conversation and metadata;
+- original native transcript and session-owned sidecars;
+- usage and observed file-touch records;
+- attributable project memory;
+- project-scoped instructions, settings, hooks, and skills.
+
+Use `--no-memory` or `--no-project-context` only when deliberately excluding those
+parts.
+
+### Export a directory or several projects
+
+A path exports every session whose working directory exactly matches it:
+
+```console
+$ asmith export -o ~/exports/current-project
+$ asmith export . -o ~/exports/current-project
+$ asmith export ~/code/project -o ~/exports/project
+```
+
+With no target, `export` defaults to the current directory (`.`), just like
+`asmith resume` and other path-aware commands.
+
+Include sessions whose cwd is below the selected directory with `--recursive`:
+
+```console
+$ asmith export ~/code/monorepo --recursive -o ~/exports/monorepo
+```
+
+Multiple ids and directories can share one bundle. Sessions are deduplicated, and
+each project's context remains in its own namespace:
+
+```console
+$ asmith export ~/code/one ~/code/two 10b72094 -o ~/exports/selected-work
+```
+
+Copy the resulting directory to the other machine, then verify it before import:
+
+```console
+$ asmith verify ~/exports/selected-work
+```
+
+### Import project work
+
+Prepare a continuation without launching anything:
+
+```console
+$ asmith import ~/exports/project \
+    --to codex \
+    --cwd ~/code/project \
+    -o ~/imports/project-codex
+```
+
+The prepared directory contains `HANDOFF.md`, `manifest.json`, and preserved sources.
+Inspect it, then launch the exact prepared import:
+
+```console
+$ asmith launch ~/imports/project-codex --to codex
+```
+
+For a quick path with no pause for manual inspection:
+
+```console
+$ asmith import ~/exports/project \
+    --to codex --cwd ~/code/project --launch
+```
+
+The adapter launches a fresh native Codex, Claude, or Copilot session in YOLO mode
+and tells it to reconcile the handoff with the current working tree. Historical file
+state may differ from disk, so the agent is explicitly told to inspect rather than
+blindly replay old tool calls.
+
+Imports can combine several bundles:
+
+```console
+$ asmith import ~/exports/phase-one ~/exports/phase-two \
+    --to claude --cwd ~/code/project -o ~/imports/combined
+```
+
+Old native dumps are accepted as a recovery fallback:
+
+```console
+$ asmith import old-claude.jsonl --to codex --cwd ~/code/project
+$ asmith import old-events.jsonl.gz --from copilot --to claude
+$ asmith import old-session-archive/ --to codex
+```
+
+Agentsmith auto-detects normal Claude/Codex/Copilot JSONL. `--from` resolves an
+ambiguous dump. Archive directories preserve companion files, but raw recovery
+cannot restore memory, child sessions, or sidecars that were never saved.
+
+To combine all live sessions for a directory into one continuation:
+
+```console
+$ asmith merge ~/code/project --to codex -o ~/imports/merged
+$ asmith launch ~/imports/merged --to codex
+```
+
+`merge` leaves every original session untouched.
+
+### Export global agent configuration
+
+Global instructions/configuration have a separate lifecycle so they are not copied
+into every project bundle:
+
+```console
+$ asmith export --global -o ~/exports/global-agents
+$ asmith verify ~/exports/global-agents
+```
+
+Select particular agent homes explicitly when desired:
+
+```console
+$ asmith export ~/.codex -o ~/exports/codex-global
+$ asmith export ~/.claude ~/.copilot -o ~/exports/claude-copilot-global
+```
+
+If the current directory itself is an agent home, targetless export infers that
+global scope:
+
+```console
+$ cd ~/.codex
+$ asmith export -o ~/exports/codex-global
+```
+
+The global export is directly browsable:
+
+```text
+global-agents/
+├── README.md
+├── global/
+│   ├── claude/
+│   ├── copilot/
+│   └── codex/
+├── shared/
+│   └── instructions/
+└── manifest.json
+```
+
+Agent-specific configuration stays under its agent. Logically shared instructions
+are stored once under `shared/instructions/` with destination mappings. When an
+agent needs a different shape—for example Codex's single global `AGENTS.md`—the
+bundle can carry a destination adapter.
+
+Authentication/session stores are excluded. Settings may still contain inline
+secrets, so review the export before sharing it.
+
+### Import and audit globals
+
+First prepare an editable review directory:
+
+```console
+$ asmith import ~/exports/global-agents -o ~/imports/global-review
+```
+
+`import` recognizes the global manifest schema, so neither `--global` nor `--to` is
+needed to prepare it. (`--global` is available as an explicit spelling.) The export
+itself does not contain `candidate/`; import creates it after verifying the bundle:
+
+```text
+global-review/
+├── HANDOFF.md
+├── candidate/       # visible files you may edit or delete
+│   ├── shared/
+│   ├── claude/
+│   ├── copilot/
+│   └── adapters/
+├── source/          # untouched verified export
+└── manifest.json
+```
+
+Browse `candidate/` and delete anything you do not want. Candidate deletion means
+explicit exclusion; the agent is instructed never to restore it from `source/`.
+Edit a candidate when a policy is useful but needs adaptation.
+
+After your manual review, launch an agent against that exact prepared directory:
+
+```console
+$ asmith launch ~/imports/global-review --to codex
+```
+
+Or prepare and launch immediately:
+
+```console
+$ asmith import ~/exports/global-agents --to codex --launch
+```
+
+The global handoff does not tell the agent to install everything. It requires the
+agent to:
+
+- inventory only files still present under `candidate/`;
+- compare them with live configuration and avoid blind overwrites;
+- flag hooks, active configuration, restrictive policies, and corporate/internal
+  or machine-specific assumptions;
+- call out restrictions involving SSH, networking, tools, filesystem access,
+  external services, or agent autonomy;
+- detect references to deleted/missing candidates and propose adapting, removing,
+  or restoring the dependency;
+- present a **keep / adapt / omit** plan and receive explicit approval before
+  writing live configuration.
+
+This is an instruction/approval gate, not a replacement for your manual candidate
+review. The untouched `source/` remains available for provenance and recovery.
+
+---
+
+## 5. Searching
 
 Two tools, different jobs:
 
@@ -181,7 +380,7 @@ lines," optionally scoped to one session.
 
 ---
 
-## 5. Understanding a session
+## 6. Understanding a session
 
 ```console
 $ asmith show 10b72094
@@ -210,7 +409,7 @@ Multi-model sessions show the dominant model (`opus-4.8 +1 more`).
 
 ---
 
-## 6. Housekeeping and shredding
+## 7. Housekeeping and shredding
 
 Delete a session with **no vestiges** anywhere — DB rows, transcript, per-session
 dirs, and id-bearing lines in shared logs/history:
@@ -249,7 +448,7 @@ $ asmith purge             # confirm, then shred them
 
 ---
 
-## 7. Working across all agents
+## 8. Working across all agents
 
 Everything defaults to **all** harnesses. Scope with `-H`:
 
@@ -264,7 +463,7 @@ owns the id automatically — you never qualify it.
 
 ---
 
-## 8. Power tips
+## 9. Power tips
 
 - **Pipe it.** Color auto-disables when output isn't a terminal, so
   `asmith dump . | less`, `asmith ls | grep KronuzBlog`, and `asmith find --one . | pbcopy`
@@ -293,6 +492,10 @@ owns the id automatically — you never qualify it.
 | Group sessions by dir / agent | `asmith tree` · `asmith tree --by agent` |
 | Reopen the last session here | `asmith resume` (or bare `copilot` / `claude` / `codex`) |
 | Read a conversation | `asmith dump <id>` (`-t` tools, `-R` reasoning, `--md`, `--no-subagents`) |
+| Export a session/project | `asmith export <id/PROJECT…> -o BUNDLE` |
+| Export globals | `asmith export --global -o BUNDLE` (or target an agent home) |
+| Prepare an import | `asmith import SOURCE [--to AGENT] -o PREPARED` |
+| Launch reviewed import | `asmith launch PREPARED --to AGENT` |
 | Find which session discussed X | `asmith search <words>` |
 | Grep transcripts | `asmith grep <regex> [id]` |
 | Inspect a session | `asmith show <id>` · `asmith files <id>` · `asmith usage <id>` |

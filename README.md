@@ -119,11 +119,10 @@ the full id).
 | `asmith resolve [id/prefix/path]` | Print the **full** session id for a short hash/prefix/dir (`--resumable`, `--with-harness`). |
 | `asmith show <session>` | Metadata: cwd, repo/branch, times, turns, files, tokens/AIU, checkpoints, resume line. |
 | `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
-| `asmith export <id/path…> -o DIR` | Create a complete, checksummed project/session bundle. Multiple targets are accepted. Memory and project context are included by default; `--no-memory` / `--no-project-context` opt out. |
-| `asmith export-global -o DIR` | Separately export user-wide instructions, hooks, skills, and settings for every agent (`-H` narrows it). |
+| `asmith export [TARGET…] -o BUNDLE` | Export sessions/projects, defaulting to the current project. An exact agent-home target such as `~/.codex` exports that agent's globals; `--global` exports all globals. |
 | `asmith verify <bundle>` | Verify the export schema, safe relative paths, sizes, and every SHA-256 checksum. |
-| `asmith import <source…> --to AGENT` | Prepare verified export bundle(s), raw JSONL/GZ dump(s), or native archive directories as a reviewable continuation. `--launch` starts the destination CLI in YOLO mode. |
-| `asmith import-global <bundle>` | Verify the source and create an editable `candidate/` tree plus a critical-review `HANDOFF.md`; never overwrite live configuration. |
+| `asmith import SOURCE… [--to AGENT] [-o PREPARED]` | Infer project/global scope from each source. Project imports require `--to`; global imports create an editable `candidate/` and critical-review `HANDOFF.md`. |
+| `asmith launch PREPARED --to AGENT` | Launch an agent against the exact prepared import after manual review/editing. |
 | `asmith merge [path] --to AGENT` | Normalize all live sessions for a directory into one prepared continuation without modifying the originals. |
 | `asmith search <query…>` | Literal-phrase search across sessions (Copilot FTS5; Claude/Codex scan), merged by recency. |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
@@ -186,7 +185,7 @@ asmith export 10b72094 -o ~/exports/one-session
 asmith export . -o ~/exports/all-sessions-here
 asmith export ~/code/project --recursive -o ~/exports/project
 asmith export ~/code/one ~/code/two -o ~/exports/two-projects
-asmith export-global -o ~/exports/global-agent-config
+asmith export --global -o ~/exports/global-agent-config
 asmith verify ~/exports/project
 ```
 
@@ -198,7 +197,7 @@ bundle.
 
 Project and global scope never mix. In a multi-project export, each context is
 namespaced by its recorded project root and global files appear zero times. Use
-`export-global` once to move user-wide Claude/Codex/Copilot instructions, settings,
+Use `export --global` once to move user-wide Claude/Codex/Copilot instructions, settings,
 hooks, commands, rules, and skills. Authentication and session stores are always
 excluded; settings can still contain inline secrets, so inspect before sharing.
 Global bundles use visible `global/claude`, `global/copilot`, and `global/codex`
@@ -219,15 +218,15 @@ asmith import ~/exports/project --to codex --cwd ~/code/project
 asmith import old-claude.jsonl old-copilot.jsonl.gz --to claude -o ~/handoff
 asmith import old-session-archive/ --to codex --launch
 asmith merge ~/code/project --to codex --launch
-asmith import-global ~/exports/global-agent-config
-asmith import-global ~/exports/global-agent-config --to codex --launch
+asmith import ~/exports/global-agent-config
+asmith import ~/exports/global-agent-config --to codex --launch
 ```
 
 Exports are preferred. Native Claude, Codex, and Copilot JSONL dumps are a recovery
 fallback; gzip transcripts and archive directories containing `events.jsonl(.gz)`
 are supported. Dumps can omit memory, child sessions, usage, and sidecars, and the
 importer reports those limitations. Project context remains attached to its source
-project namespace. `import-global` preserves the verified bundle under `source/`,
+project namespace. A global-schema `import` preserves the verified bundle under `source/`,
 copies visible files into an editable `candidate/`, and creates `HANDOFF.md` mapping
 each retained file to its user-home destination. Deleting a candidate explicitly
 excludes it; it is never silently restored or installed. The handoff flags hooks,

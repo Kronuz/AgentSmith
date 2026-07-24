@@ -82,8 +82,10 @@ dumps, gzip dumps, and Copilot-style archive directories. It creates a reviewabl
 `merge` feeds live sessions through the same export/import pipeline. Project context
 and attributable memory are included by default (`--no-*` opts out) and remain
 namespaced per project root. Global instructions/settings/hooks/skills use the
-separate `export-global` / `import-global` lifecycle, so they are never duplicated
-into project bundles. Both inventories exclude authentication/session stores;
+separate `export --global`/agent-home and schema-inferred `import` lifecycle, so they
+are never duplicated into project bundles. The older `export-global` /
+`import-global` commands remain compatibility aliases. Both inventories exclude
+authentication/session stores;
 global imports preserve verified `source/`, create an editable `candidate/`, and use
 the same `HANDOFF.md` convention as project imports. Candidate deletion is an
 explicit exclusion. The handoff requires critical policy/dependency review and user
