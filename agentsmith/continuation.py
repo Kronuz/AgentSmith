@@ -34,6 +34,20 @@ class GlobalImportResult:
     files: int
 
 
+def _ingestion_protocol() -> str:
+    return """## Required ingestion protocol
+
+Before acting, perform exhaustive ingestion. Read this entire handoff in chunks if necessary.
+
+1. Inventory the adjacent manifest and preserved sources. Inspect every normalized conversation, memory, project context, instruction, skill, hook, configuration, and other relevant artifact.
+2. Consult native artifacts where normalized material has gaps. Read transcript chunks through normal tools so the inspected material is evidenced in the new native session.
+3. Account for every source and recovered session in a coverage ledger in your response.
+4. Extract concrete objectives, decisions, constraints, open tasks, unresolved questions, and referenced files. Make the coverage ledger and consolidated continuation state durable conversation turns.
+5. Do not substitute a vague overview or silently skip material because it is long. Explicitly identify anything unreadable, unsupported, duplicated, or intentionally omitted.
+6. Do not fabricate historical user/assistant turns or write private session-store records; preserve provenance instead.
+7. Complete ingestion before changing the project or live configuration."""
+
+
 def _json_lines(path: Path) -> Iterator[dict[str, Any]]:
     with (
         gzip.open(path, mode="rt", errors="replace")
@@ -320,6 +334,8 @@ def prepare_continuation(
             f"- Recovered sessions: {session_count}\n\n"
             "This handoff is agent-neutral. Launch it with "
             "`asmith launch AGENT HANDOFF.md`.\n\n"
+            f"{_ingestion_protocol()}\n\n"
+            "---\n\n"
             "Continue the work represented below. First inspect the current working "
             "tree and reconcile it with this history; do not assume the historical "
             "file state still matches disk. Preserve unfinished objectives, decisions, "
@@ -354,32 +370,8 @@ def handoff_launch_command(
     handoff: Path,
     harness: str,
     cwd: Path,
-    *,
-    prompt: str | None = None,
 ) -> list[str]:
-    task_prompt = prompt or (
-        f"Read {handoff}, reconcile it with the working directory, and carry out the "
-        "handoff. Inspect current state before acting because the handoff may be stale."
-    )
-    ingestion = (
-        " Before acting, perform exhaustive ingestion. Read the entire handoff in "
-        "chunks if necessary. If an adjacent manifest or preserved sources exist, "
-        "inventory them and inspect every normalized conversation, memory, project "
-        "context, instruction, skill, hook, configuration, and other relevant "
-        "artifact; consult native artifacts where normalized material has gaps. "
-        "Account for every source and recovered session in a coverage ledger in "
-        "your response. Read transcript chunks through your normal tools so the "
-        "inspected material is evidenced in this new native session, then make the "
-        "coverage ledger and consolidated continuation state durable conversation "
-        "turns. Extract concrete objectives, decisions, constraints, open tasks, "
-        "unresolved questions, and referenced files. Do not replace this with a "
-        "vague overview or silently skip material because it is long. Explicitly "
-        "identify anything unreadable, unsupported, duplicated, or intentionally "
-        "omitted. Do not fabricate historical user/assistant turns or write private "
-        "session-store records; preserve provenance instead. Complete this "
-        "ingestion before changing the project or live configuration."
-    )
-    prompt = task_prompt + ingestion
+    prompt = f"Read and follow the handoff at {handoff}."
     if harness == "codex":
         return [
             "codex",
@@ -400,33 +392,11 @@ def launch_command(
     harness: str,
     cwd: Path,
 ) -> list[str]:
-    prompt = (
-        f"Read {result.handoff}, verify its history against the current working tree, "
-        "and continue the unfinished work."
-    )
-    return handoff_launch_command(
-        result.handoff,
-        harness,
-        cwd,
-        prompt=prompt,
-    )
+    return handoff_launch_command(result.handoff, harness, cwd)
 
 
 def global_launch_command(result: GlobalImportResult, harness: str) -> list[str]:
-    prompt = (
-        f"Read {result.handoff}. Treat {harness} as the sole destination agent and "
-        "audit the editable candidate configuration against its live global "
-        "configuration. Do not install or modify anything until you have presented "
-        "the keep/adapt/omit plan and I explicitly approve it. "
-        "Consolidate applicable instructions into the destination's native layout; "
-        "do not leave runtime dependencies on another agent's home directory."
-    )
-    return handoff_launch_command(
-        result.handoff,
-        harness,
-        Path.home(),
-        prompt=prompt,
-    )
+    return handoff_launch_command(result.handoff, harness, Path.home())
 
 
 def prepare_global_import(
@@ -460,6 +430,14 @@ def prepare_global_import(
                 "export; `candidate/` is the visible, editable selection proposed "
                 "for import."
             ),
+            "",
+            (
+                "The agent launched with this handoff is the sole destination agent. "
+                "Treat all Claude/Codex/Copilot material as migration input to reconcile "
+                "into that agent's native layout; do not restore every source agent."
+            ),
+            "",
+            _ingestion_protocol(),
             "",
             "## Required review protocol",
             "",

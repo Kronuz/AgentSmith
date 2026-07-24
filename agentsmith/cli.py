@@ -769,6 +769,16 @@ def cmd_launch(args: argparse.Namespace) -> None:
     except (OSError, json.JSONDecodeError) as exc:
         die(f"cannot read adjacent prepared-import manifest: {exc}")
     schema = manifest.get("schema")
+    if schema in {"agentsmith-global-import", "agentsmith-continuation"}:
+        handoff_text = handoff.read_text(errors="replace")
+        if "## Required ingestion protocol" not in handoff_text:
+            print(
+                yellow(
+                    "warning: prepared handoff predates the exhaustive ingestion "
+                    "protocol; regenerate it with asmith import/merge"
+                ),
+                file=sys.stderr,
+            )
     if schema == "agentsmith-global-import":
         result = GlobalImportResult(root, handoff, int(manifest.get("files", 0)))
         command = global_launch_command(result, args.agent)

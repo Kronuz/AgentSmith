@@ -329,6 +329,7 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("prepared 3 recovered session(s)", result.stdout)
         handoff = (prepared / "HANDOFF.md").read_text()
         self.assertIn("This handoff is agent-neutral", handoff)
+        self.assertIn("Required ingestion protocol", handoff)
         self.assertIn("hello there", handoff)
         self.assertTrue((prepared / "sources" / "001-bundle-import").is_dir())
 
@@ -481,6 +482,9 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("~/.claude/rules/shared.md", import_instructions)
         self.assertIn("~/.copilot/instructions/shared.md", import_instructions)
         self.assertIn("explicit user exclusion", import_instructions)
+        self.assertIn("Required ingestion protocol", import_instructions)
+        self.assertIn("Do not fabricate historical", import_instructions)
+        self.assertIn("sole destination agent", import_instructions)
         self.assertIn(
             "Preserve applicable instruction meaning verbatim", import_instructions
         )
@@ -504,8 +508,8 @@ class BackendFixturesTest(unittest.TestCase):
         )
         self.assertIn("fake-codex", launched.stdout)
         self.assertIn(str(global_staging / "HANDOFF.md"), launched.stdout)
-        self.assertIn("perform exhaustive ingestion", launched.stdout)
-        self.assertIn("Do not fabricate historical", launched.stdout)
+        self.assertIn("Read and follow the handoff", launched.stdout)
+        self.assertNotIn("perform exhaustive ingestion", launched.stdout)
         import_help = self.run_cli("import", "--help")
         self.assertNotIn("--harness", import_help.stdout)
         self.assertNotIn("--to", import_help.stdout)
@@ -558,7 +562,8 @@ class BackendFixturesTest(unittest.TestCase):
             str(self.cwd),
         )
         self.assertIn(str(standalone), generic.stdout)
-        self.assertIn("perform exhaustive ingestion", generic.stdout)
+        self.assertIn("Read and follow the handoff", generic.stdout)
+        self.assertNotIn("perform exhaustive ingestion", generic.stdout)
 
         claude_global = self.root / "claude-global"
         self.run_cli(
