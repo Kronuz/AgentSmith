@@ -1004,6 +1004,7 @@ def current_session_id() -> str | None:
     return (
         os.environ.get("COPILOT_SESSION_ID")
         or os.environ.get("COPILOT_AGENT_SESSION_ID")
+        or os.environ.get("CLAUDE_CODE_SESSION_ID")
         or os.environ.get("CODEX_THREAD_ID")
     )
 

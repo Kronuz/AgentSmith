@@ -104,7 +104,8 @@ Copilot's DB rows (all `session_id`-keyed tables + `sessions` + FTS
 session whose cwd is at/under it). `cmd_purge` targets **empty shells**
 (`not resumable and turn_count == 0`). Both build a target list and hand it to
 `_shred_targets` (preview / confirm / shred). Safety: skips the current live
-session (`COPILOT_SESSION_ID` or `CODEX_THREAD_ID`) rather than shredding it
+session (`COPILOT_SESSION_ID`, `CLAUDE_CODE_SESSION_ID`, or `CODEX_THREAD_ID`)
+rather than shredding it
 (refuses if it was the only
 explicit target), confirms unless `-y`, previews with `--dry-run` (per-session
 detail gated behind `-v` or ≤5 targets so bulk previews stay instant).
