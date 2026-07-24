@@ -472,7 +472,10 @@ Global bundles use visible `global/claude`, `global/copilot`, and `global/codex`
 directories; the manifest separately records their hidden-home destinations.
 Logically shared instructions may live once under `shared/instructions` with
 multiple destination mappings. Destination adapters can consolidate them when an
-agent uses a single instruction file (for example Codex's global `AGENTS.md`).
+agent uses a single instruction file. Such adapters are derived migration aids, not
+authoritative install artifacts: import must split their material across the
+destination's native instruction, project, skill, hook, and configuration surfaces
+and respect that agent's instruction-ingestion budget.
 
 ## Importing and merging
 
@@ -511,6 +514,16 @@ changes, deduplicate overlapping sources, and normalize paths into a self-contai
 native configuration that does not reference another agent home, the export, or the
 prepared import. A launched agent must present a keep/adapt/omit plan and receive
 explicit approval before changing live configuration.
+
+That plan starts with a compact destination blueprint rather than a wall of source
+filenames. For every proposed output it shows the exact destination, purpose, major
+sections, source inputs, approximate size, and dependencies. A separate grouped
+exception table calls out restrictive policies, unavailable commands/services,
+machine- or work-specific skills, unsupported features, conflicts, and omissions.
+The agent must ask for the user's disposition of these items; it may not silently
+keep or discard them. Global always-loaded instructions stay concise, while
+task-specific workflows become skills/commands, project guidance stays project-local,
+hooks remain lifecycle behavior, and settings remain configuration.
 
 The destination adapter starts a **new native session** with instructions to read
 the handoff. AgentSmith does not fabricate private JSONL/SQLite records. `merge`

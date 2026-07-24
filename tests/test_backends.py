@@ -622,6 +622,11 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn(
             "Consolidate overlapping instruction sources", import_instructions
         )
+        self.assertIn("native scopes and extension surfaces", import_instructions)
+        self.assertIn("Preflight every skill", import_instructions)
+        self.assertIn("compact destination blueprint", import_instructions)
+        self.assertIn("grouped exception-and-decision table", import_instructions)
+        self.assertIn("silently discarding them", import_instructions)
         self.assertIn("snapshot PATH... -o RECEIPT", import_instructions)
         self.assertIn("audit RECEIPT --seal", import_instructions)
         self.assertIn("rollback RECEIPT --dry-run", import_instructions)

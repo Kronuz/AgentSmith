@@ -506,22 +506,46 @@ def prepare_global_import(
                 "hints, not as an order to install every agent's configuration."
             ),
             (
-                "8. Critically assess instructions and hooks for this machine and work "
-                "environment. Flag restrictions on SSH, networking, tools, filesystem "
-                "access, external services, internal/company systems, or agent autonomy."
+                "8. Use the destination's native scopes and extension surfaces instead "
+                "of flattening everything into its always-loaded instruction file. Keep "
+                "global instructions short and generally applicable; put project-only "
+                "guidance in project scope, reusable workflows in skills or commands, "
+                "lifecycle behavior in hooks, and settings in configuration. Respect "
+                "every destination instruction-ingestion budget with useful headroom."
             ),
             (
-                "9. Check references and dependencies among kept files. If a kept file "
+                "9. Critically assess instructions and hooks for this machine and work "
+                "environment. Flag restrictions on SSH, networking, tools, filesystem "
+                "access, external services, internal/company systems, or agent autonomy. "
+                "Do not silently keep, weaken, or omit a potentially functionality-"
+                "limiting policy: summarize its effect and ask the user to decide."
+            ),
+            (
+                "10. Preflight every skill, command, hook, and integration for referenced "
+                "executables, files, MCP servers, services, operating-system assumptions, "
+                "and work-environment dependencies. Group clearly inapplicable items and "
+                "recommend omit or disable, but obtain the user's disposition rather than "
+                "silently discarding them."
+            ),
+            (
+                "11. Check references and dependencies among kept files. If a kept file "
                 "references a deleted or missing file, propose removing/adapting the "
                 "reference or restoring the dependency, and ask the user which."
             ),
             (
-                "10. Present a keep/adapt/omit plan, all conflicts, and all potentially "
-                "functionality-limiting policies. Ask for explicit approval before "
-                "writing anything under the live home configuration."
+                "12. Before showing file contents or a long source-file inventory, present "
+                "a compact destination blueprint grouped by native surface. For each "
+                "proposed output give its exact path, purpose, major content sections, "
+                "source inputs, approximate size, dependencies, and keep/adapt/omit "
+                "summary. Follow it with a grouped exception-and-decision table covering "
+                "conflicts, limiting policies, unavailable dependencies, environment-only "
+                "material, unsupported features, and omissions. Ask focused questions for "
+                "every unresolved decision."
             ),
             (
-                "11. The approval plan must enumerate every exact live path that may be "
+                "13. Ask for explicit approval before writing anything under live home "
+                "configuration. The approval plan must enumerate every exact live path "
+                "that may be "
                 "created, modified, moved, or deleted. After approval but before the "
                 f"first live write, run `{asmith} snapshot PATH... -o RECEIPT`. Put the "
                 "receipt in durable user state outside the destination agent home, the "
@@ -532,7 +556,7 @@ def prepare_global_import(
                 "new snapshot before touching the additional path."
             ),
             (
-                f"12. After all approved writes, run `{asmith} audit RECEIPT --seal`. "
+                f"14. After all approved writes, run `{asmith} audit RECEIPT --seal`. "
                 "Report the durable receipt path and its complete "
                 "created/modified/deleted/unchanged ledger. Also show the user "
                 f"`{asmith} audit RECEIPT`, "
@@ -587,6 +611,15 @@ def prepare_global_import(
                 part in lower_path for part in ("settings", "mcp-config", "config.")
             ):
                 flags.append("active configuration")
+            if (
+                lower_path == "adapters/codex/agents.md"
+                and exported.stat().st_size > 32_768
+            ):
+                flags.append(
+                    "derived Codex adapter exceeds the default 32,768-byte "
+                    f"AGENTS.md ingestion budget ({exported.stat().st_size:,} bytes); "
+                    "do not install wholesale"
+                )
             policy_terms = [
                 term
                 for term in (
