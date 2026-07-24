@@ -203,6 +203,9 @@ hooks, commands, rules, and skills. Authentication and session stores are always
 excluded; settings can still contain inline secrets, so inspect before sharing.
 Global bundles use visible `global/claude`, `global/copilot`, and `global/codex`
 directories; the manifest separately records their hidden-home destinations.
+Logically shared instructions may live once under `shared/instructions` with
+multiple destination mappings. Destination adapters can consolidate them when an
+agent uses a single instruction file (for example Codex's global `AGENTS.md`).
 
 ## Importing and merging
 

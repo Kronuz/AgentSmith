@@ -393,6 +393,15 @@ def prepare_global_import(
             if not isinstance(entry, dict):
                 continue
             bundle_path = str(entry.get("path", "?"))
+            multiple_destinations = entry.get("destinations")
+            if isinstance(multiple_destinations, list):
+                for mapped in multiple_destinations:
+                    if isinstance(mapped, str):
+                        lines.append(
+                            f"- `{bundle_path}` → `~/{mapped}` "
+                            f"({entry.get('harness', 'shared')})"
+                        )
+                continue
             explicit_destination = entry.get("destination")
             if isinstance(explicit_destination, str):
                 relative = Path(explicit_destination)

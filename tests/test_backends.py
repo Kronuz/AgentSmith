@@ -427,6 +427,14 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("global/codex/config.toml", global_paths)
         self.assertFalse(any("auth.json" in path for path in global_paths))
         self.assertFalse(any("AGENTS.md" in path for path in global_paths))
+        global_manifest["environment"][0]["destination"] = None
+        global_manifest["environment"][0]["destinations"] = [
+            ".claude/rules/shared.md",
+            ".copilot/instructions/shared.md",
+        ]
+        (global_bundle / "manifest.json").write_text(
+            json.dumps(global_manifest, indent=2) + "\n"
+        )
 
         global_staging = self.root / "global-staging"
         global_import = self.run_cli(
@@ -437,7 +445,8 @@ class BackendFixturesTest(unittest.TestCase):
         )
         self.assertIn("staged", global_import.stdout)
         import_instructions = (global_staging / "IMPORT.md").read_text()
-        self.assertIn("~/.codex/config.toml", import_instructions)
+        self.assertIn("~/.claude/rules/shared.md", import_instructions)
+        self.assertIn("~/.copilot/instructions/shared.md", import_instructions)
 
         other = self.root / "other-work"
         other.mkdir()

@@ -385,8 +385,13 @@ def _project_bundle(
 
 def _global_bundle(backup: Path, destination: Path) -> dict[str, int]:
     destination.mkdir(parents=True)
-    entries: list[dict[str, str | None]] = []
-    counts = {"claude": 0, "copilot": 0, "copilot_conflicts": 0}
+    entries: list[dict[str, object]] = []
+    counts = {
+        "claude": 0,
+        "copilot": 0,
+        "shared_instructions": 0,
+        "copilot_conflicts": 0,
+    }
 
     claude = backup / "laptop-backup" / "agents" / "claude"
     for source in sorted(path for path in claude.rglob("*") if path.is_file()):
@@ -409,11 +414,73 @@ def _global_bundle(backup: Path, destination: Path) -> dict[str, int]:
 
     old = backup / "laptop-backup" / "agents" / "copilot"
     latest = backup / "dotcopilot"
+    shared_sources = [
+        latest / "copilot-instructions.md",
+        *sorted((latest / "instructions").glob("*.md")),
+    ]
+    codex_sections: list[str] = []
+    for source in shared_sources:
+        relative = (
+            Path("copilot-instructions.md")
+            if source.name == "copilot-instructions.md"
+            else Path(source.name)
+        )
+        target = destination / "shared" / "instructions" / relative
+        _copy(source, target)
+        if source.name == "copilot-instructions.md":
+            destinations = [
+                ".copilot/copilot-instructions.md",
+                ".claude/rules/copilot-instructions.md",
+            ]
+        else:
+            destinations = [
+                str(Path(".copilot/instructions") / source.name),
+                str(Path(".claude/rules") / source.name),
+            ]
+        entries.append(
+            {
+                "scope": "global",
+                "harness": "shared",
+                "project_root": None,
+                "destination": None,
+                "destinations": destinations,
+                "source": str(source),
+                "path": str(target.relative_to(destination)),
+            }
+        )
+        codex_sections.extend(
+            (
+                f"<!-- source: shared/instructions/{relative} -->",
+                source.read_text(errors="replace").rstrip(),
+                "",
+            )
+        )
+        counts["shared_instructions"] += 1
+    codex_adapter = destination / "adapters" / "codex" / "AGENTS.md"
+    codex_adapter.parent.mkdir(parents=True, exist_ok=True)
+    codex_adapter.write_text(
+        "# Shared user instructions\n\n" + "\n".join(codex_sections).rstrip() + "\n"
+    )
+    entries.append(
+        {
+            "scope": "global",
+            "harness": "codex",
+            "project_root": None,
+            "destination": ".codex/AGENTS.md",
+            "source": "generated from shared/instructions",
+            "path": str(codex_adapter.relative_to(destination)),
+        }
+    )
+
     selected: dict[Path, Path] = {}
     for root in (old, latest):
         for source in sorted(path for path in root.rglob("*") if path.is_file()):
             relative = source.relative_to(root)
             if source.name in _SKIP_NAMES or ".git" in relative.parts:
+                continue
+            if relative == Path("copilot-instructions.md") or (
+                relative.parts and relative.parts[0] == "instructions"
+            ):
                 continue
             if relative in selected and root == latest:
                 counts["copilot_conflicts"] += 1
@@ -437,6 +504,8 @@ def _global_bundle(backup: Path, destination: Path) -> dict[str, int]:
         "Visible, portable copies of user-wide Claude and Copilot configuration.\n\n"
         "- `claude/` maps to `~/.claude/`\n"
         "- `copilot/` maps to `~/.copilot/`\n\n"
+        "- `shared/instructions/` is the canonical cross-agent instruction set\n"
+        "- `adapters/codex/AGENTS.md` is its consolidated Codex form\n\n"
         "Run `asmith import-global .` to create a conflict-safe review map. Files "
         "are never silently installed over existing configuration.\n"
     )
@@ -495,6 +564,7 @@ def run(backup: Path, destination: Path) -> None:
             f"- Exact duplicate dumps omitted: {len(duplicates)}",
             f"- Global Claude files: {global_counts['claude']}",
             f"- Global Copilot files: {global_counts['copilot']}",
+            f"- Shared instruction files: {global_counts['shared_instructions']}",
             (
                 "- Copilot conflicts resolved in favor of dotcopilot: "
                 f"{global_counts['copilot_conflicts']}"
