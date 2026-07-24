@@ -294,7 +294,8 @@ $ asmith merge ~/code/api ~/code/frontend 10b72094 \
 
 Sessions selected more than once are deduplicated. If selected sessions span several
 working directories and `--cwd` is omitted, the handoff defaults to your current
-directory and prints a warning.
+directory and prints a warning. `merge --cwd` does not launch anything: it records
+the workspace that a later `launch` should use.
 
 ### Launch any handoff
 
@@ -313,6 +314,36 @@ $ asmith launch copilot ./NEXT_STEPS.md --cwd ~/code/project
 
 Prepared continuations carry their workspace in `manifest.json`; `--cwd` overrides
 it. A standalone file uses the current directory unless `--cwd` is supplied.
+
+### Choose ingestion depth
+
+Launch is exhaustive by default:
+
+```console
+$ asmith launch codex ~/imports/combined/HANDOFF.md
+$ asmith launch codex ~/imports/combined/HANDOFF.md --ingest full
+```
+
+The agent is instructed to read the handoff in chunks, inventory its manifest and
+preserved sources, cover every recovered session, and inspect memory, project context,
+instructions, skills, hooks, and configuration. Before changing anything it must
+present a coverage ledger and consolidated state: objectives, decisions, constraints,
+open tasks, unresolved questions, and referenced files. It must explicitly report
+anything unreadable, unsupported, duplicated, or deliberately omitted. It reads
+transcript chunks through normal tools so the inspected material and its resulting
+ledger become durable turns in the new native session. It does not fabricate old
+user/assistant roles or write private JSONL/SQLite session records.
+
+For a faster but explicitly incomplete continuation:
+
+```console
+$ asmith launch codex ~/imports/combined/HANDOFF.md --ingest handoff
+```
+
+This uses `HANDOFF.md` as primary context and opens preserved sources only as needed.
+Even full mode cannot recover data that was never exported or guarantee perfect
+retention beyond an agent's finite context; its value is traceable coverage rather
+than a vague, unaudited summary.
 
 ### Export global agent configuration
 

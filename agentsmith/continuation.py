@@ -355,12 +355,40 @@ def handoff_launch_command(
     harness: str,
     cwd: Path,
     *,
+    ingest: str = "full",
     prompt: str | None = None,
 ) -> list[str]:
-    prompt = prompt or (
+    task_prompt = prompt or (
         f"Read {handoff}, reconcile it with the working directory, and carry out the "
         "handoff. Inspect current state before acting because the handoff may be stale."
     )
+    if ingest == "full":
+        ingestion = (
+            " Before acting, perform exhaustive ingestion. Read the entire handoff in "
+            "chunks if necessary. If an adjacent manifest or preserved sources exist, "
+            "inventory them and inspect every normalized conversation, memory, project "
+            "context, instruction, skill, hook, configuration, and other relevant "
+            "artifact; consult native artifacts where normalized material has gaps. "
+            "Account for every source and recovered session in a coverage ledger in "
+            "your response. Read transcript chunks through your normal tools so the "
+            "inspected material is evidenced in this new native session, then make the "
+            "coverage ledger and consolidated continuation state durable conversation "
+            "turns. Extract concrete objectives, decisions, constraints, open tasks, "
+            "unresolved questions, and referenced files. Do not replace this with a "
+            "vague overview or silently skip material because it is long. Explicitly "
+            "identify anything unreadable, unsupported, duplicated, or intentionally "
+            "omitted. Do not fabricate historical user/assistant turns or write private "
+            "session-store records; preserve provenance instead. Complete this "
+            "ingestion before changing the project or live configuration."
+        )
+    elif ingest == "handoff":
+        ingestion = (
+            " Use the handoff as the primary context and inspect preserved sources only "
+            "when needed; state that this lightweight mode does not prove full coverage."
+        )
+    else:
+        raise ValueError(f"unsupported ingestion mode: {ingest}")
+    prompt = task_prompt + ingestion
     if harness == "codex":
         return [
             "codex",
@@ -380,6 +408,8 @@ def launch_command(
     result: ContinuationResult,
     harness: str,
     cwd: Path,
+    *,
+    ingest: str = "full",
 ) -> list[str]:
     prompt = (
         f"Read {result.handoff}, verify its history against the current working tree, "
@@ -389,11 +419,14 @@ def launch_command(
         result.handoff,
         harness,
         cwd,
+        ingest=ingest,
         prompt=prompt,
     )
 
 
-def global_launch_command(result: GlobalImportResult, harness: str) -> list[str]:
+def global_launch_command(
+    result: GlobalImportResult, harness: str, *, ingest: str = "full"
+) -> list[str]:
     prompt = (
         f"Read {result.handoff}. Treat {harness} as the sole destination agent and "
         "audit the editable candidate configuration against its live global "
@@ -406,6 +439,7 @@ def global_launch_command(result: GlobalImportResult, harness: str) -> list[str]
         result.handoff,
         harness,
         Path.home(),
+        ingest=ingest,
         prompt=prompt,
     )
 

@@ -771,7 +771,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
     schema = manifest.get("schema")
     if schema == "agentsmith-global-import":
         result = GlobalImportResult(root, handoff, int(manifest.get("files", 0)))
-        command = global_launch_command(result, args.agent)
+        command = global_launch_command(result, args.agent, ingest=args.ingest)
         cwd = Path.home()
     elif schema == "agentsmith-continuation":
         cwd_value = manifest.get("cwd")
@@ -793,7 +793,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
             int(manifest.get("sessions", 0)),
             [],
         )
-        command = launch_command(result2, args.agent, cwd)
+        command = launch_command(result2, args.agent, cwd, ingest=args.ingest)
     else:
         cwd = (
             Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd().resolve()
@@ -801,7 +801,9 @@ def cmd_launch(args: argparse.Namespace) -> None:
         if not cwd.is_dir():
             die(f"working directory does not exist: {cwd}")
         try:
-            command = handoff_launch_command(handoff, args.agent, cwd)
+            command = handoff_launch_command(
+                handoff, args.agent, cwd, ingest=args.ingest
+            )
         except ValueError as exc:
             die(str(exc))
     print(f"handoff: {handoff}")
@@ -1816,7 +1818,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--cwd",
         default=".",
-        help="destination working directory (default: current directory)",
+        help="workspace recorded for later launch (default: current directory)",
     )
     sp.add_argument(
         "-o",
@@ -1852,7 +1854,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument(
         "--cwd",
-        help="working directory for a standalone handoff or override for a continuation",
+        help="workspace for a standalone handoff or override of the prepared workspace",
+    )
+    sp.add_argument(
+        "--ingest",
+        choices=("full", "handoff"),
+        default="full",
+        help="full coverage audit (default) or lightweight handoff-only reading",
     )
     sp.set_defaults(func=cmd_launch)
 
@@ -1861,9 +1869,9 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[common],
         help="combine live session/project targets into one prepared handoff",
         description=(
-            "Discover every live session pointing at a project directory, export them "
-            "temporarily, and normalize them chronologically into one agent-neutral "
-            "handoff. Original sessions are never modified."
+            "Resolve live session ids/prefixes and project paths, export the matching "
+            "sessions temporarily, and normalize them chronologically into one "
+            "agent-neutral handoff. Original sessions are never modified."
         ),
     )
     _mark(
@@ -1877,7 +1885,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument(
         "--cwd",
-        help="destination working directory (default: merged path)",
+        help="workspace recorded for later launch (default: shared session cwd or cwd)",
     )
     sp.add_argument(
         "-o",

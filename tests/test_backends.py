@@ -504,6 +504,8 @@ class BackendFixturesTest(unittest.TestCase):
         )
         self.assertIn("fake-codex", launched.stdout)
         self.assertIn(str(global_staging / "HANDOFF.md"), launched.stdout)
+        self.assertIn("perform exhaustive ingestion", launched.stdout)
+        self.assertIn("Do not fabricate historical", launched.stdout)
         import_help = self.run_cli("import", "--help")
         self.assertNotIn("--harness", import_help.stdout)
         self.assertNotIn("--to", import_help.stdout)
@@ -552,10 +554,13 @@ class BackendFixturesTest(unittest.TestCase):
             "launch",
             "codex",
             str(standalone),
+            "--ingest",
+            "handoff",
             "--cwd",
             str(self.cwd),
         )
         self.assertIn(str(standalone), generic.stdout)
+        self.assertIn("lightweight mode", generic.stdout)
 
         claude_global = self.root / "claude-global"
         self.run_cli(

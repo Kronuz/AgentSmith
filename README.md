@@ -284,8 +284,9 @@ asmith export --global -o ~/exports/globals
   default current project.
 - Multiple targets are combined chronologically and deduplicated.
 - `--recursive`: for path targets, include sessions in nested project directories.
-- `--cwd PROJECT`: workspace for the resulting handoff. When all sessions share one
-  cwd it is inferred; mixed cwd selections otherwise use the current directory.
+- `--cwd PROJECT`: workspace recorded for a later `launch`; it does not launch now.
+  When all sessions share one cwd it is inferred; mixed cwd selections otherwise use
+  the current directory.
 - `--no-memory` / `--no-project-context`: omit those exported inputs.
 - `-o/--out PREPARED`: new review directory; otherwise use the XDG state directory.
 
@@ -301,6 +302,8 @@ asmith merge ~/code/api ~/code/web 10b72094 \
 - `HANDOFF`: prepared directory, its `HANDOFF.md`, or any standalone document.
 - `--cwd PROJECT`: workspace for standalone files or an override for a prepared
   continuation.
+- `--ingest full|handoff`: `full` is the default exhaustive coverage protocol;
+  `handoff` is a faster, explicitly incomplete handoff-only reading.
 
 Launch uses the selected CLI's YOLO mode and starts a new native session; it never
 fabricates private session-store records.
@@ -449,9 +452,26 @@ explicit approval before changing live configuration.
 The destination adapter starts a **new native session** with instructions to read
 the handoff. Agentsmith does not fabricate private JSONL/SQLite records. `merge`
 uses the same export/import pipeline, orders live sessions chronologically, retains
-their native artifacts, and leaves every original untouched. Exceptionally long
-histories can produce multi-megabyte handoffs; the destination should inspect them
-selectively rather than assuming the entire file fits in one context window.
+their native artifacts, and leaves every original untouched.
+
+Launch defaults to `--ingest full`. Before acting, the destination agent is instructed
+to read the complete handoff in chunks, inventory adjacent manifests and preserved
+sources, inspect every normalized conversation plus memory, project context,
+instructions, skills, hooks, and configuration, consult native artifacts for gaps,
+and account for every source and recovered session in a coverage ledger. It must
+extract objectives, decisions, constraints, open tasks, unresolved questions, and
+referenced files; anything unreadable, unsupported, duplicated, or omitted must be
+named explicitly. Transcript chunks are read through normal agent tools so those
+reads, the coverage ledger, and the consolidated state are recorded in the new native
+session. Agentsmith does not fake alternating historical roles or write private
+session-store records. This avoids reducing a large migration to a vague overview
+while preserving provenance.
+
+`--ingest handoff` is an explicit speed/coverage tradeoff: it reads the handoff as
+primary context and consults preserved sources only as needed. No launch mode can
+recover information absent from a raw dump or defeat the destination model's finite
+context perfectly; full mode provides an auditable ingestion procedure rather than a
+claim of lossless model memory.
 
 `launch` also accepts an arbitrary handoff document; it is not limited to imports:
 
