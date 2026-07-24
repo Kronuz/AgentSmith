@@ -6,10 +6,11 @@ Guidance for AI agents (and humans) working on this project.
 
 **Agentsmith** is a swiss-army knife for inspecting AI coding-agent sessions,
 exposed as the `asmith` command. It reads (and can shred) the local session stores of
-two harnesses:
+three harnesses:
 
 - **copilot** — GitHub Copilot CLI (`~/.copilot`)
 - **claude** — Claude Code (`~/.claude`)
+- **codex** — OpenAI Codex CLI (`~/.codex`)
 
 Everything is read-only except `asmith rm` (session shred). There are **no
 AI/model-dependent commands** — an earlier `summarize`/`triage` pair was removed
@@ -29,8 +30,9 @@ because it needed a working agent (`copilot -p`) that isn't reliably available.
 | `agentsmith/backends/base.py` | The `Backend` ABC + shared id/path resolution helpers. |
 | `agentsmith/backends/copilot.py` | `CopilotBackend` + copilot store paths. |
 | `agentsmith/backends/claude.py` | `ClaudeBackend` + claude store paths. |
+| `agentsmith/backends/codex.py` | `CodexBackend` + Codex store paths. |
 | `agentsmith/backends/__init__.py` | `select_backends`, `resolve`, `all_sessions`, `backend_for`. |
-| `agentsmith.sh` | Sourceable bash/zsh wrapper: `asmith`, `copilot()` / `claude()`, completions. |
+| `agentsmith.sh` | Sourceable bash/zsh wrapper: `asmith`, agent auto-resume wrappers, completions. |
 | `README.md` / `AGENTS.md` / `TUTORIAL.md` | User docs / agent-facing docs / hands-on walkthrough. |
 | `pyrefly.toml` | Strict type-check config (`project-includes = ["agentsmith"]`). |
 
@@ -45,7 +47,7 @@ A package, three layers:
    `UsageRow`, `Checkpoint`, `PurgeReport`. `util.py` holds the color/time/text
    helpers and `die`; `config.py` holds shared paths; `purge.py` holds
    `deep_purge`.
-2. **Backends** (`backends/`): an abstract `Backend` (`base.py`) with two
+2. **Backends** (`backends/`): an abstract `Backend` (`base.py`) with three
    implementations. Each maps its harness's native storage onto the shared model.
    - `CopilotBackend` — SQLite (`~/.copilot/session-store.db`) for metadata +
      the per-session `~/.copilot/session-state/<id>/events.jsonl` transcript.
@@ -59,8 +61,12 @@ A package, three layers:
      tokens only (no AIU; cache split into read = `cache_read_input_tokens` and
      write = `cache_creation_input_tokens`; no separate reasoning count). Always
      "resumable".
+   - `CodexBackend` — the newest SQLite `~/.codex/state_*.sqlite` thread index +
+     dated rollout JSONL files under `~/.codex/sessions`. It parses both function
+     and custom tools and accounts for input/output/cache/reasoning tokens.
+     Archived sessions remain inspectable but are not resumable.
 3. **Commands** (`cmd_*`): each selects backends via `-H/--harness`
-   (`copilot`/`claude`/`all`, default `all`), then iterates. Session-specific
+   (`copilot`/`claude`/`codex`/`all`, default `all`), then iterates. Session-specific
    commands resolve an id/prefix/path across all selected backends
    (`resolve()`), so ids never need a harness qualifier.
 
@@ -93,7 +99,8 @@ Copilot's DB rows (all `session_id`-keyed tables + `sessions` + FTS
 session whose cwd is at/under it). `cmd_purge` targets **empty shells**
 (`not resumable and turn_count == 0`). Both build a target list and hand it to
 `_shred_targets` (preview / confirm / shred). Safety: skips the current live
-session (`COPILOT_SESSION_ID`) rather than shredding it (refuses if it was the only
+session (`COPILOT_SESSION_ID` or `CODEX_THREAD_ID`) rather than shredding it
+(refuses if it was the only
 explicit target), confirms unless `-y`, previews with `--dry-run` (per-session
 detail gated behind `-v` or ≤5 targets so bulk previews stay instant).
 
@@ -183,12 +190,13 @@ into a file); `--raw` streams the underlying transcript file verbatim.
 
 ## Testing
 
-- Exercise both harnesses. Copilot has ~130 sessions; Claude has a handful of
+- Exercise all harnesses. Copilot has ~130 sessions; Claude has a handful of
   main sessions plus many nested `subagents/` transcripts (only the top-level
   `<id>.jsonl` are "sessions").
 - **Never test destructive paths on real data.** Point the env overrides at a
   sandbox: `COPILOT_HOME`, `COPILOT_DB`, `COPILOT_STATE`, `CLAUDE_HOME`,
-  `ASMITH_CACHE`, `ASMITH_SUMMARIES`. The shred test builds a fake `CLAUDE_HOME` with
+  `CODEX_HOME`, `CODEX_DB`, `CODEX_SESSIONS`, `ASMITH_CACHE`, `ASMITH_SUMMARIES`.
+  The shred test builds a fake `CLAUDE_HOME` with
   id-named vestiges + a second session, shreds, and asserts zero traces of the
   target while the other session stays intact.
 - `asmith --harness claude ...` / `-H copilot` scope a command to one harness.

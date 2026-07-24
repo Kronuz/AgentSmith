@@ -1,7 +1,8 @@
 # Agentsmith Tutorial
 
-A hands-on tour of `asmith`, the swiss-army knife for your Copilot CLI and Claude Code
-sessions. Every example is a real command; output is trimmed for brevity.
+A hands-on tour of `asmith`, the swiss-army knife for your Copilot CLI, Claude
+Code, and Codex CLI sessions. Every example is a real command; output is trimmed
+for brevity.
 
 If you haven't yet, add this to your shell rc and open a new shell:
 
@@ -9,16 +10,15 @@ If you haven't yet, add this to your shell rc and open a new shell:
 [ -r "$HOME/code/Agentsmith/agentsmith.sh" ] && . "$HOME/code/Agentsmith/agentsmith.sh"
 ```
 
-That gives you `asmith`, the `copilot()` / `claude()` auto-resume wrappers, and tab
-completion. `asmith` reads both `~/.copilot` (Copilot CLI) and `~/.claude` (Claude
-Code); rows from the two are tagged `co` and `cl`.
+That gives you `asmith`, the `copilot()` / `claude()` / `codex()` auto-resume
+wrappers, and tab completion. Rows are tagged `co`, `cl`, or `cx`.
 
 ---
 
 ## 1. The five you'll use daily
 
 ```console
-$ asmith recent            # what was I just working on, across both agents?
+$ asmith recent            # what was I just working on, across all agents?
 $ asmith ls --here         # sessions for the current directory
 $ asmith tree              # everything grouped by directory
 $ asmith resume            # reopen the newest resumable session for this dir
@@ -47,7 +47,7 @@ $ asmith ls -n 20                  # cap the count (default is all)
 $ asmith dirs                      # every directory that has sessions
 ```
 
-`asmith list` shows **all** sessions by default (both agents, newest first). Want them
+`asmith list` shows **all** sessions by default (all agents, newest first). Want them
 grouped by directory instead of a flat list? Use `asmith tree`:
 
 ```console
@@ -87,6 +87,7 @@ newest session, and pass through untouched when you give arguments:
 ```console
 $ copilot                      # resumes newest Copilot session here (or starts fresh)
 $ claude                       # same, for Claude
+$ codex                        # same, for Codex (full bypass/YOLO mode)
 $ copilot -p "quick question"  # arguments? straight through to the real CLI
 ```
 
@@ -212,12 +213,12 @@ $ asmith purge             # confirm, then shred them
 
 ---
 
-## 7. Working across both agents
+## 7. Working across all agents
 
-Everything defaults to **both** harnesses. Scope with `-H`:
+Everything defaults to **all** harnesses. Scope with `-H`:
 
 ```console
-$ asmith ls                # both, tagged co/cl
+$ asmith ls                # all, tagged co/cl/cx
 $ asmith ls -H copilot     # Copilot only
 $ asmith stats -H claude   # Claude only
 ```
@@ -237,8 +238,9 @@ owns the id automatically — you never qualify it.
 - **Scripting.** `asmith find --one --resumable --exact .` is the exact resolver the
   `copilot()` wrapper uses — handy in your own scripts.
 - **Point it at a sandbox.** Every store path is an env override
-  (`COPILOT_HOME`, `COPILOT_DB`, `COPILOT_STATE`, `CLAUDE_HOME`, `ASMITH_CACHE`,
-  `ASMITH_SUMMARIES`). This is how you test destructive commands without touching real
+  (`COPILOT_HOME`, `COPILOT_DB`, `COPILOT_STATE`, `CLAUDE_HOME`, `CODEX_HOME`,
+  `CODEX_DB`, `CODEX_SESSIONS`, `ASMITH_CACHE`, `ASMITH_SUMMARIES`). This is how
+  you test destructive commands without touching real
   data — build a fake home, run `asmith rm ... -y`, confirm zero traces.
 - **Faster Python.** Set `ASMITH_PYTHON=/path/to/python3` before sourcing to pick the
   interpreter the wrapper uses.
@@ -253,7 +255,7 @@ owns the id automatically — you never qualify it.
 | List every session | `asmith ls` (path + name per row) |
 | List a dir's sessions | `asmith ls --here` |
 | Group sessions by dir / agent | `asmith tree` · `asmith tree --by agent` |
-| Reopen the last session here | `asmith resume` (or just `copilot` / `claude`) |
+| Reopen the last session here | `asmith resume` (or bare `copilot` / `claude` / `codex`) |
 | Read a conversation | `asmith dump <id>` (`-t` tools, `-R` reasoning, `--md`, `--no-subagents`) |
 | Find which session discussed X | `asmith search <words>` |
 | Grep transcripts | `asmith grep <regex> [id]` |

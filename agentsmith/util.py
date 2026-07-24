@@ -66,7 +66,11 @@ def die(msg: str, code: int = 1) -> NoReturn:
 
 
 def harness_badge(name: str) -> str:
-    return cyan("co") if name == "copilot" else magenta("cl")
+    if name == "copilot":
+        return cyan("co")
+    if name == "claude":
+        return magenta("cl")
+    return green("cx")
 
 
 def short(session_id: str) -> str:

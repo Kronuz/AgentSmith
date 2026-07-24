@@ -4,7 +4,7 @@
 # Source me from your ~/.profile / ~/.zshrc / ~/.bashrc:
 #     source ~/code/Agentsmith/agentsmith.sh
 #
-# Provides the `asmith` command plus the copilot()/claude() auto-resume wrappers.
+# Provides `asmith` plus copilot()/claude()/codex() auto-resume wrappers.
 # Compatible with bash & zsh. All reporting lives in the `agentsmith` package next
 # to this file; the shell wrappers exist because they must exec the CLI in your
 # interactive shell.
@@ -44,6 +44,7 @@ asmith() {
       case "$h" in
         copilot) command copilot --resume="$id" --yolo ;;
         claude)  command claude --resume "$id" ;;
+        codex)   command codex resume "$id" --dangerously-bypass-approvals-and-sandbox ;;
         *) printf 'asmith: unknown harness %s\n' "$h" >&2; return 1 ;;
       esac
       ;;
@@ -58,7 +59,7 @@ asmith() {
       cat <<'EOF'
 
 Shell-only extras (from agentsmith.sh):
-  asmith resume [-H copilot|claude] [dir]   resume newest resumable session for dir
+  asmith resume [-H copilot|claude|codex] [dir]   resume newest resumable session for dir
   asmith cd [sess]                          cd into a session's on-disk state dir
 EOF
       ;;
@@ -68,10 +69,10 @@ EOF
   esac
 }
 
-# copilot() / claude() — bare command resumes the newest resumable session for the
+# Agent wrappers — a bare command resumes the newest resumable session for the
 # current directory, otherwise starts fresh; any arguments pass straight through to
 # the real CLI. copilot() replaces the inline function that used to live in
-# ~/.profile; both resolve via the toolset's exact-cwd index.
+# ~/.profile; all resolve via the toolset's exact-cwd index.
 copilot() {
   if [ $# -eq 0 ]; then
     local id
@@ -89,6 +90,20 @@ claude() {
     command claude ${id:+--resume "$id"}
   else
     command claude "$@"
+  fi
+}
+
+codex() {
+  if [ $# -eq 0 ]; then
+    local id
+    id="$(_asmith_py find --one --resumable --exact -H codex . 2>/dev/null)"
+    if [ -n "$id" ]; then
+      command codex resume "$id" --dangerously-bypass-approvals-and-sandbox
+    else
+      command codex --dangerously-bypass-approvals-and-sandbox
+    fi
+  else
+    command codex "$@"
   fi
 }
 

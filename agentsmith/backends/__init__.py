@@ -7,11 +7,13 @@ from ..model import Session
 from ..util import die, harness_badge, looks_like_path, parse_ts, real, short
 from .base import Backend
 from .claude import ClaudeBackend
+from .codex import CodexBackend
 from .copilot import CopilotBackend
 
 __all__ = [
     "Backend",
     "ClaudeBackend",
+    "CodexBackend",
     "CopilotBackend",
     "all_sessions",
     "backend_for",
@@ -24,7 +26,12 @@ def select_backends(harness: str) -> list[Backend]:
     wanted = HARNESSES if harness == "all" else (harness,)
     out: list[Backend] = []
     for name in wanted:
-        b: Backend = CopilotBackend() if name == "copilot" else ClaudeBackend()
+        backends: dict[str, type[Backend]] = {
+            "copilot": CopilotBackend,
+            "claude": ClaudeBackend,
+            "codex": CodexBackend,
+        }
+        b = backends[name]()
         if b.available():
             out.append(b)
     if not out:

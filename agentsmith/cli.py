@@ -659,7 +659,7 @@ def cmd_complete(args: argparse.Namespace) -> None:
                 print("\n".join(str(c) for c in a.choices))
                 return
         if prev in ("-H", "--harness"):  # also covers shell-only commands
-            print("copilot\nclaude\nall")
+            print("copilot\nclaude\ncodex\nall")
             return
 
         if cur.startswith("-"):  # completing a flag
@@ -911,8 +911,10 @@ def cmd_stats(args: argparse.Namespace) -> None:
 
 
 def current_session_id() -> str | None:
-    return os.environ.get("COPILOT_SESSION_ID") or os.environ.get(
-        "COPILOT_AGENT_SESSION_ID"
+    return (
+        os.environ.get("COPILOT_SESSION_ID")
+        or os.environ.get("COPILOT_AGENT_SESSION_ID")
+        or os.environ.get("CODEX_THREAD_ID")
     )
 
 
@@ -1087,7 +1089,7 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument(
         "-H",
         "--harness",
-        choices=("copilot", "claude", "all"),
+        choices=("copilot", "claude", "codex", "all"),
         default="all",
         help="which agent's sessions to use (default: all)",
     )
@@ -1182,7 +1184,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  sessions   total sessions in that directory\n"
             "  resumable  how many can still be resumed (the *; green if any)\n"
             "  last       time since the most recent session there\n"
-            "  agents     harness(es) present: co=copilot, cl=claude (only with -H all)"
+            "  agents     harness(es): co=copilot, cl=claude, cx=codex (-H all)"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
