@@ -180,7 +180,7 @@ Use any full id or unique prefix:
 
 ```console
 $ asmith export 10b72094 -o ~/exports/one-session
-exported 1 session(s) to /Users/me/exports/one-session
+/Users/me/exports/one-session
 $ asmith verify ~/exports/one-session
 verified 1 session(s), 8 checksummed file(s)
 ```

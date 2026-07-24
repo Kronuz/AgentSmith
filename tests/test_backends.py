@@ -339,7 +339,7 @@ class BackendFixturesTest(unittest.TestCase):
             "-o",
             str(destination),
         )
-        self.assertIn("exported 3 session(s)", result.stdout)
+        self.assertEqual(result.stdout.strip(), str(destination.resolve()))
         manifest = json.loads((destination / "manifest.json").read_text())
         self.assertEqual(len(manifest["sessions"]), 3)
         memories = list((destination / "project-memory").rglob("MEMORY.md"))
@@ -366,7 +366,9 @@ class BackendFixturesTest(unittest.TestCase):
             "-o",
             str(prepared),
         )
-        self.assertIn("prepared 3 recovered session(s)", result.stdout)
+        self.assertEqual(
+            result.stdout.strip(), str((prepared / "HANDOFF.md").resolve())
+        )
         handoff = (prepared / "HANDOFF.md").read_text()
         self.assertIn("This handoff is agent-neutral", handoff)
         self.assertIn("Required ingestion protocol", handoff)
@@ -386,7 +388,9 @@ class BackendFixturesTest(unittest.TestCase):
             "-o",
             str(raw_prepared),
         )
-        self.assertIn("prepared 1 recovered session(s)", raw_result.stdout)
+        self.assertEqual(
+            raw_result.stdout.strip(), str((raw_prepared / "HANDOFF.md").resolve())
+        )
         self.assertIn("raw dump may omit", raw_result.stderr)
         self.assertIn("hello there", (raw_prepared / "HANDOFF.md").read_text())
 
@@ -410,7 +414,10 @@ class BackendFixturesTest(unittest.TestCase):
             "-o",
             str(archive_prepared),
         )
-        self.assertIn("prepared 1 recovered session(s)", archive_result.stdout)
+        self.assertEqual(
+            archive_result.stdout.strip(),
+            str((archive_prepared / "HANDOFF.md").resolve()),
+        )
         copied = archive_prepared / "sources" / "001-old-copilot-archive"
         self.assertTrue((copied / "plan.md").is_file())
         self.assertIn("hello there", (archive_prepared / "HANDOFF.md").read_text())
@@ -431,7 +438,10 @@ class BackendFixturesTest(unittest.TestCase):
             "-o",
             str(multi_prepared),
         )
-        self.assertIn("prepared 2 recovered session(s)", multi_result.stdout)
+        self.assertEqual(
+            multi_result.stdout.strip(),
+            str((multi_prepared / "HANDOFF.md").resolve()),
+        )
         multi_handoff = (multi_prepared / "HANDOFF.md").read_text()
         self.assertIn("Native claude dump", multi_handoff)
         self.assertIn("Native codex dump", multi_handoff)
@@ -490,7 +500,7 @@ class BackendFixturesTest(unittest.TestCase):
             "-o",
             str(global_bundle),
         )
-        self.assertIn("global agent configuration", global_export.stdout)
+        self.assertEqual(global_export.stdout.strip(), str(global_bundle.resolve()))
         global_manifest = json.loads((global_bundle / "manifest.json").read_text())
         global_paths = {entry["path"] for entry in global_manifest["environment"]}
         self.assertIn("global/codex/config.toml", global_paths)
@@ -511,11 +521,16 @@ class BackendFixturesTest(unittest.TestCase):
             str(global_bundle),
             "-o",
             str(global_staging),
+            "--verbose",
         )
-        self.assertIn("staged", global_import.stdout)
+        self.assertEqual(
+            global_import.stdout.strip(),
+            str((global_staging / "HANDOFF.md").resolve()),
+        )
+        self.assertIn("staged", global_import.stderr)
         self.assertIn(
             f"next: asmith launch AGENT {global_staging.resolve() / 'HANDOFF.md'}",
-            global_import.stdout,
+            global_import.stderr,
         )
         import_instructions = (global_staging / "HANDOFF.md").read_text()
         self.assertIn("~/.claude/rules/shared.md", import_instructions)
@@ -674,7 +689,7 @@ class BackendFixturesTest(unittest.TestCase):
             "-o",
             str(multi),
         )
-        self.assertIn("exported 4 session(s)", multi_result.stdout)
+        self.assertEqual(multi_result.stdout.strip(), str(multi.resolve()))
         multi_manifest = json.loads((multi / "manifest.json").read_text())
         roots = {entry["project_root"] for entry in multi_manifest["environment"]}
         self.assertEqual(roots, {str(self.cwd.resolve()), str(other.resolve())})
@@ -687,7 +702,9 @@ class BackendFixturesTest(unittest.TestCase):
             "-o",
             str(destination),
         )
-        self.assertIn("merged 3 session(s)", result.stdout)
+        self.assertEqual(
+            result.stdout.strip(), str((destination / "HANDOFF.md").resolve())
+        )
         handoff = (destination / "HANDOFF.md").read_text()
         self.assertIn("copilot fixture", handoff)
         self.assertIn("codex parent", handoff)
@@ -708,7 +725,9 @@ class BackendFixturesTest(unittest.TestCase):
             "-o",
             str(selected),
         )
-        self.assertIn("merged 2 session(s)", selected_result.stdout)
+        self.assertEqual(
+            selected_result.stdout.strip(), str((selected / "HANDOFF.md").resolve())
+        )
         selected_handoff = (selected / "HANDOFF.md").read_text()
         self.assertIn("copilot fixture", selected_handoff)
         self.assertIn("codex parent", selected_handoff)

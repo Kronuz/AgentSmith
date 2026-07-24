@@ -118,7 +118,7 @@ the full id).
 | `asmith find [DIR]` | List sessions for a directory. `--resumable`, `--exact`. |
 | `asmith resolve [ID/PREFIX/PATH]` | Resolve a unique id prefix or path to one **full** session id (`--resumable`, `--exact`). |
 | `asmith show <session>` | Metadata: cwd, repo/branch, times, turns, files, tokens/AIU, checkpoints, resume line. |
-| `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
+| `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`, `-v`. |
 | `asmith export [TARGET…] -o BUNDLE` | Export sessions/projects, defaulting to the current project. An exact agent-home target such as `~/.codex` exports that agent's globals; `--global` exports all globals. |
 | `asmith verify <bundle>` | Verify the export schema, safe relative paths, sizes, and every SHA-256 checksum. |
 | `asmith import SOURCE… [-o PREPARED]` | Build an agent-neutral handoff from existing bundles/dumps. Global imports create an editable `candidate/` and critical-review `HANDOFF.md`. |
@@ -200,6 +200,7 @@ repository, timestamps, turns, usage, files, checkpoints, and the native resume 
 - `--color`: retain ANSI color even when redirected.
 - `--raw`: emit one underlying native transcript byte-for-byte.
 - `-o/--out FILE`: write to a file; with `--raw`, copy the native transcript.
+- `-v/--verbose`: with `-o`, describe the artifact on stderr.
 
 `asmith search QUERY…`
 
@@ -247,6 +248,7 @@ newest session for the current directory.
 - `--no-memory`: omit attributable project memory.
 - `--no-project-context`: omit project instructions, hooks, settings, and skills.
 - `-o/--out BUNDLE`: required new destination; it must not already exist.
+- `-v/--verbose`: describe the bundle on stderr.
 
 ```sh
 asmith export -o ~/exports/current
@@ -264,6 +266,7 @@ asmith export --global -o ~/exports/globals
 - `--cwd PROJECT`: workspace recorded in a project/session handoff; default current
   directory.
 - `-o/--out PREPARED`: new review directory; otherwise use the XDG state directory.
+- `-v/--verbose`: describe the handoff and suggested launch command on stderr.
 
 `asmith merge [TARGET…] [-o PREPARED]`
 
@@ -277,6 +280,17 @@ asmith export --global -o ~/exports/globals
   the current directory.
 - `--no-memory` / `--no-project-context`: omit those exported inputs.
 - `-o/--out PREPARED`: new review directory; otherwise use the XDG state directory.
+- `-v/--verbose`: describe the handoff and suggested launch command on stderr.
+
+Artifact-producing commands keep stdout composable: `export` prints only the bundle
+directory; `import` and `merge` print only the generated `HANDOFF.md`; and
+`dump -o` prints only its output file. Verbose context goes to stderr and therefore
+does not change command substitution, pipes, or `xargs`:
+
+```sh
+handoff=$(asmith import ~/exports/project -o ~/imports/project)
+asmith launch codex "$handoff"
+```
 
 ```sh
 asmith merge . -o ~/imports/current-history

@@ -65,9 +65,21 @@ from .util import (
 )
 
 
-def _print_handoff(path: Path, agent: str | None = None) -> None:
-    print(f"handoff: {path}")
-    print(f"next: asmith launch {agent or 'AGENT'} {shlex.quote(str(path))}")
+def _print_artifact(path: Path, verbose: bool, *details: str) -> None:
+    """Print one pipeable artifact path; optional human context goes to stderr."""
+    print(path)
+    if verbose:
+        for detail in details:
+            print(detail, file=sys.stderr)
+
+
+def _print_handoff(path: Path, verbose: bool, summary: str) -> None:
+    _print_artifact(
+        path,
+        verbose,
+        summary,
+        f"next: asmith launch AGENT {shlex.quote(str(path))}",
+    )
 
 
 def _term_cols() -> int:
@@ -444,7 +456,12 @@ def cmd_dump(args: argparse.Namespace) -> None:
             die(f"no raw transcript for {short(s.id)}")
         if args.out:
             shutil.copyfile(raw, args.out)
-            print(f"copied raw transcript to {args.out}")
+            destination = Path(args.out).expanduser().resolve()
+            _print_artifact(
+                destination,
+                args.verbose,
+                f"copied raw transcript to {destination}",
+            )
         else:
             with raw.open("rb") as source:
                 shutil.copyfileobj(source, sys.stdout.buffer)
@@ -471,12 +488,17 @@ def cmd_dump(args: argparse.Namespace) -> None:
     text = head + "\n\n" + body + "\n"
 
     if args.out:
-        Path(args.out).write_text(
+        destination = Path(args.out).expanduser().resolve()
+        destination.write_text(
             text
             if (args.color and not args.no_color and not args.md)
             else strip_ansi(text)
         )
-        print(f"wrote {args.out} ({len(msgs)} messages)")
+        _print_artifact(
+            destination,
+            args.verbose,
+            f"wrote {len(msgs)} message(s) to {destination}",
+        )
     else:
         print(text)
 
@@ -590,11 +612,11 @@ def cmd_export(args: argparse.Namespace) -> None:
         )
     except (FileExistsError, ValueError) as exc:
         die(str(exc))
-    print(
-        green(
-            f"exported {len(items)} session(s) to "
-            f"{Path(args.out).expanduser().resolve()}"
-        )
+    destination = Path(args.out).expanduser().resolve()
+    _print_artifact(
+        destination,
+        args.verbose,
+        green(f"exported {len(items)} session(s) to {destination}"),
     )
 
 
@@ -605,11 +627,11 @@ def cmd_export_global(args: argparse.Namespace) -> None:
         count = export_global_bundle(Path(args.out), harnesses)
     except (FileExistsError, ValueError, OSError) as exc:
         die(str(exc))
-    print(
-        green(
-            f"exported {count} global agent configuration file(s) to "
-            f"{Path(args.out).expanduser().resolve()}"
-        )
+    destination = Path(args.out).expanduser().resolve()
+    _print_artifact(
+        destination,
+        args.verbose,
+        green(f"exported {count} global agent configuration file(s) to {destination}"),
     )
 
 
@@ -660,10 +682,13 @@ def cmd_merge(args: argparse.Namespace) -> None:
             )
         except (FileExistsError, FileNotFoundError, ValueError, OSError) as exc:
             die(str(exc))
-    print(
-        green(f"merged {result.sessions} session(s) into continuation at {result.root}")
+    _print_handoff(
+        result.handoff,
+        args.verbose,
+        green(
+            f"merged {result.sessions} session(s) into continuation at {result.root}"
+        ),
     )
-    _print_handoff(result.handoff)
     if len(session_cwds) > 1 and not args.cwd:
         print(
             yellow(
@@ -716,13 +741,14 @@ def cmd_import(args: argparse.Namespace) -> None:
         )
     except (FileExistsError, FileNotFoundError, ValueError, OSError) as exc:
         die(str(exc))
-    print(
+    _print_handoff(
+        result.handoff,
+        args.verbose,
         green(
             f"prepared {result.sessions} recovered session(s) from "
             f"{result.sources} source(s) at {result.root}"
-        )
+        ),
     )
-    _print_handoff(result.handoff)
     for warning in result.warnings:
         print(yellow(f"warning: {warning}"), file=sys.stderr)
 
@@ -734,12 +760,13 @@ def cmd_import_global(args: argparse.Namespace) -> None:
         )
     except (FileExistsError, FileNotFoundError, ValueError, OSError) as exc:
         die(str(exc))
-    print(
+    _print_handoff(
+        result.handoff,
+        args.verbose,
         green(
             f"staged {result.files} global agent configuration file(s) at {result.root}"
-        )
+        ),
     )
-    _print_handoff(result.handoff)
 
 
 def cmd_launch(args: argparse.Namespace) -> None:
@@ -795,7 +822,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
             command = handoff_launch_command(handoff, args.agent, cwd)
         except ValueError as exc:
             die(str(exc))
-    print(f"handoff: {handoff}")
+    print(dim(f"handoff: {handoff}"), file=sys.stderr)
     print(dim("launching: " + " ".join(command[:2]) + " …"), file=sys.stderr)
     try:
         completed = subprocess.run(command, cwd=cwd, check=False)
@@ -1656,6 +1683,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="emit one underlying transcript byte-for-byte (-o copies to FILE)",
     )
     sp.add_argument("-o", "--out", help="write to FILE")
+    sp.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="with -o, describe the artifact on stderr",
+    )
     sp.set_defaults(func=cmd_dump)
 
     sp = sub.add_parser(
@@ -1708,6 +1741,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="exclude project-scoped instructions, hooks, settings, and skills",
     )
+    sp.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="describe the exported bundle on stderr",
+    )
     sp.set_defaults(func=cmd_export)
 
     sp = sub.add_parser(
@@ -1754,6 +1793,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--out",
         metavar="PREPARED",
         help="new prepared import directory (default: XDG state directory)",
+    )
+    sp.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="describe the prepared handoff and next command on stderr",
     )
     sp.set_defaults(func=cmd_import)
 
@@ -1829,6 +1874,12 @@ def build_parser() -> argparse.ArgumentParser:
         dest="include_project_context",
         action="store_false",
         help="exclude project-scoped agent instructions/configuration",
+    )
+    sp.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="describe the prepared handoff and next command on stderr",
     )
     sp.set_defaults(func=cmd_merge)
 
