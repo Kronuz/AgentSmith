@@ -402,7 +402,9 @@ def global_launch_command(
 
 
 def prepare_global_import(
-    source: Path, destination: Path | None = None
+    source: Path,
+    destination: Path | None = None,
+    cwd: Path | None = None,
 ) -> GlobalImportResult:
     """Stage a global configuration bundle without overwriting live configuration."""
     source = source.expanduser().resolve()
@@ -496,6 +498,25 @@ def prepare_global_import(
                 "functionality-limiting policies. Ask for explicit approval before "
                 "writing anything under the live home configuration."
             ),
+            (
+                "11. The approval plan must enumerate every exact live path that may be "
+                "created, modified, moved, or deleted. After approval but before the "
+                "first live write, run `asmith snapshot PATH... -o RECEIPT`. Put the "
+                "receipt in durable user state outside the destination agent home, the "
+                "export, and this prepared import (normally under "
+                "`$XDG_STATE_HOME/agentsmith/receipts/` or "
+                "`~/.local/state/agentsmith/receipts/`). Never snapshot the whole home "
+                "directory. If the target set changes, stop and obtain approval for a "
+                "new snapshot before touching the additional path."
+            ),
+            (
+                "12. After all approved writes, run `asmith audit RECEIPT --seal`. "
+                "Report the durable receipt path and its complete "
+                "created/modified/deleted/unchanged ledger. Also show the user "
+                "`asmith audit RECEIPT`, `asmith rollback RECEIPT --dry-run`, and "
+                "`asmith rollback RECEIPT -y`. Do not call the migration complete "
+                "unless the receipt seals successfully."
+            ),
             "",
             "## Candidate destination map",
             "",
@@ -587,6 +608,7 @@ def prepare_global_import(
             "schema": "agentsmith-global-import",
             "schema_version": 1,
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "cwd": str(cwd.expanduser().resolve()) if cwd else None,
             "source": "source",
             "candidate": "candidate",
             "files": len(entries),

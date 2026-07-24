@@ -397,9 +397,8 @@ First prepare an editable review directory:
 $ asmith import ~/exports/global-agents -o ~/imports/global-review
 ```
 
-`import` recognizes the global manifest schema, so `--global` is not needed to
-prepare it. (`--global` is available as an explicit spelling.) The export
-itself does not contain `candidate/`; import creates it after verifying the bundle:
+`import` recognizes the global manifest schema automatically. The export itself does
+not contain `candidate/`; import creates it after verifying the bundle:
 
 ```text
 global-review/
@@ -423,6 +422,10 @@ After your manual review, launch an agent against that exact prepared directory:
 $ asmith launch codex ~/imports/global-review/HANDOFF.md
 ```
 
+The prepared directory is the launch cwd by default, so the new session belongs to
+the review workspace rather than `~`. Pass `--cwd DIR` to `import` to record another
+workspace, or to `launch` for a final override.
+
 The global handoff does not tell the agent to install everything. It requires the
 agent to:
 
@@ -442,6 +445,25 @@ agent to:
   or restoring the dependency;
 - present a **keep / adapt / omit** plan and receive explicit approval before
   writing live configuration.
+- enumerate every exact live path it may change and create a durable pre-change
+  receipt outside both the agent home and disposable migration directories;
+- seal that receipt after the writes and report the complete ledger plus audit and
+  rollback commands.
+
+The reversible sequence generated into the handoff is:
+
+```sh
+asmith snapshot PATH... -o ~/.local/state/agentsmith/receipts/MIGRATION
+# approved writes happen here
+asmith audit ~/.local/state/agentsmith/receipts/MIGRATION --seal
+asmith rollback ~/.local/state/agentsmith/receipts/MIGRATION --dry-run
+asmith rollback ~/.local/state/agentsmith/receipts/MIGRATION -y
+```
+
+`snapshot` captures existing content and records paths that do not exist yet.
+Rollback restores the former content and removes newly created tracked paths. The
+whole home directory is intentionally refused: exact targets keep rollback bounded
+and auditable.
 
 After validating the live result, the export bundle and prepared import may both be
 deleted; neither is a runtime dependency.
@@ -588,6 +610,9 @@ owns the id automatically — you never qualify it.
 | Prepare an import | `asmith import SOURCE -o PREPARED` |
 | Combine live session/project targets | `asmith merge TARGET… -o PREPARED` |
 | Launch a handoff | `asmith launch AGENT HANDOFF` |
+| Snapshot configuration before changes | `asmith snapshot PATH… -o RECEIPT` |
+| Seal or audit installed changes | `asmith audit RECEIPT --seal` · `asmith audit RECEIPT` |
+| Undo installed changes | `asmith rollback RECEIPT --dry-run` then `asmith rollback RECEIPT -y` |
 | Find which session discussed X | `asmith search <words>` |
 | Grep transcripts | `asmith grep <regex> [id]` |
 | Inspect a session | `asmith show <id>` · `asmith files <id>` · `asmith usage <id>` |

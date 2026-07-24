@@ -37,6 +37,9 @@ from .continuation import (
 )
 from .export import ExportItem, export_bundle, export_global_bundle, verify_bundle
 from .model import CACHE_READ_WEIGHT, Msg, PurgeReport, SearchHit, Session
+from .receipt import audit as audit_receipt
+from .receipt import create as create_receipt
+from .receipt import rollback as rollback_receipt
 from .usage_cache import usage_for
 from .util import (
     ago,
@@ -729,7 +732,7 @@ def cmd_import(args: argparse.Namespace) -> None:
         args.bundle = args.sources[0]
         cmd_import_global(args)
         return
-    cwd = Path(args.cwd).expanduser().resolve()
+    cwd = Path(args.cwd or ".").expanduser().resolve()
     if not cwd.is_dir():
         die(f"working directory does not exist: {cwd}")
     try:
@@ -756,7 +759,9 @@ def cmd_import(args: argparse.Namespace) -> None:
 def cmd_import_global(args: argparse.Namespace) -> None:
     try:
         result = prepare_global_import(
-            Path(args.bundle), Path(args.out) if args.out else None
+            Path(args.bundle),
+            Path(args.out) if args.out else None,
+            Path(args.cwd) if args.cwd else None,
         )
     except (FileExistsError, FileNotFoundError, ValueError, OSError) as exc:
         die(str(exc))
@@ -785,8 +790,13 @@ def cmd_launch(args: argparse.Namespace) -> None:
     schema = manifest.get("schema")
     if schema == "agentsmith-global-import":
         result = GlobalImportResult(root, handoff, int(manifest.get("files", 0)))
+        cwd_value = manifest.get("cwd")
         cwd = (
-            Path(args.cwd).expanduser().resolve() if args.cwd else Path.home().resolve()
+            Path(args.cwd).expanduser().resolve()
+            if args.cwd
+            else Path(cwd_value).expanduser().resolve()
+            if isinstance(cwd_value, str)
+            else root
         )
         if not cwd.is_dir():
             die(f"working directory does not exist: {cwd}")
@@ -830,6 +840,73 @@ def cmd_launch(args: argparse.Namespace) -> None:
         die(f"destination CLI is not installed or not on PATH: {command[0]}")
     if completed.returncode:
         raise SystemExit(completed.returncode)
+
+
+def cmd_snapshot(args: argparse.Namespace) -> None:
+    try:
+        receipt = create_receipt(
+            [Path(target) for target in args.targets],
+            Path(args.out),
+        )
+    except (FileExistsError, OSError, TypeError, ValueError) as exc:
+        die(str(exc))
+    _print_artifact(
+        receipt,
+        args.verbose,
+        green(f"snapshotted {len(args.targets)} path(s) to {receipt}"),
+    )
+
+
+def _print_receipt_rows(rows: list[dict[str, object]]) -> None:
+    for row in rows:
+        state = str(row["action"])
+        marker = green("✓") if bool(row.get("matches", True)) else yellow("!")
+        print(f"{marker} {_pad(state, 10)}  {path(str(row['path']))}")
+
+
+def cmd_audit(args: argparse.Namespace) -> None:
+    try:
+        rows = audit_receipt(Path(args.receipt), seal=args.seal)
+    except (OSError, TypeError, ValueError) as exc:
+        die(str(exc))
+    _print_receipt_rows(rows)
+    changed = sum(row["action"] != "unchanged" for row in rows)
+    if args.seal:
+        print(dim(f"\nsealed receipt: {changed} changed, {len(rows)} tracked"))
+    else:
+        drifted = sum(not bool(row["matches"]) for row in rows)
+        print(dim(f"\n{drifted} drifted, {len(rows)} tracked"))
+        if drifted:
+            raise SystemExit(1)
+
+
+def cmd_rollback(args: argparse.Namespace) -> None:
+    try:
+        preview = rollback_receipt(Path(args.receipt), apply=False)
+    except (OSError, TypeError, ValueError) as exc:
+        die(str(exc))
+    changed = [row for row in preview if row["action"] != "unchanged"]
+    _print_receipt_rows(preview)
+    if not changed:
+        print(dim("\n(nothing to roll back)"))
+        return
+    if args.dry_run:
+        print(dim(f"\n(dry run — {len(changed)} path(s) would be restored)"))
+        return
+    if not args.yes:
+        if not sys.stdin.isatty():
+            die("refusing to roll back without confirmation; pass -y/--yes")
+        response = input(
+            f"Restore {len(changed)} path(s) to the receipt baseline? [y/N] "
+        )
+        if response.strip().lower() not in ("y", "yes"):
+            print(dim("aborted"))
+            return
+    try:
+        rollback_receipt(Path(args.receipt), apply=True)
+    except (OSError, TypeError, ValueError) as exc:
+        die(str(exc))
+    print(green(f"restored {len(changed)} path(s) to the receipt baseline"))
 
 
 def cmd_search(args: argparse.Namespace) -> None:
@@ -1484,6 +1561,9 @@ def _order_subcommand_help(parser: argparse.ArgumentParser) -> None:
         "import",
         "merge",
         "launch",
+        "snapshot",
+        "audit",
+        "rollback",
         "redact",
         "rm",
         "purge",
@@ -1785,8 +1865,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument(
         "--cwd",
-        default=".",
-        help="workspace recorded for later launch (default: current directory)",
+        help=(
+            "workspace recorded for later launch (default: current directory for "
+            "project imports; prepared directory for global imports)"
+        ),
     )
     sp.add_argument(
         "-o",
@@ -1827,6 +1909,67 @@ def build_parser() -> argparse.ArgumentParser:
         help="workspace for a standalone handoff or override of the prepared workspace",
     )
     sp.set_defaults(func=cmd_launch)
+
+    sp = sub.add_parser(
+        "snapshot",
+        parents=[output],
+        help="snapshot exact paths before agent-managed changes",
+        description=(
+            "Create a new reversible change receipt containing the exact baseline "
+            "state of each target. Broad targets such as the home directory are refused."
+        ),
+    )
+    sp.add_argument(
+        "targets",
+        nargs="+",
+        metavar="PATH",
+        help="exact file or directory to track (it may not exist yet)",
+    )
+    sp.add_argument(
+        "-o",
+        "--out",
+        required=True,
+        metavar="RECEIPT",
+        help="new receipt directory outside all tracked paths",
+    )
+    sp.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="describe the snapshot on stderr",
+    )
+    sp.set_defaults(func=cmd_snapshot)
+
+    sp = sub.add_parser(
+        "audit",
+        parents=[output],
+        help="audit or seal a filesystem change receipt",
+    )
+    sp.add_argument("receipt", metavar="RECEIPT", help="change receipt directory")
+    sp.add_argument(
+        "--seal",
+        action="store_true",
+        help="record the current state as the approved post-change state",
+    )
+    sp.set_defaults(func=cmd_audit)
+
+    sp = sub.add_parser(
+        "rollback",
+        parents=[output],
+        help="restore paths from a filesystem change receipt",
+        description=(
+            "Restore every tracked path to its exact pre-change state. Files created "
+            "after the snapshot are removed; modified/deleted paths are restored."
+        ),
+    )
+    sp.add_argument("receipt", metavar="RECEIPT", help="change receipt directory")
+    sp.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what would be restored without changing files",
+    )
+    sp.add_argument("-y", "--yes", action="store_true", help="skip confirmation")
+    sp.set_defaults(func=cmd_rollback)
 
     sp = sub.add_parser(
         "merge",

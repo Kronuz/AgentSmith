@@ -30,6 +30,7 @@ because it needed a working agent (`copilot -p`) that isn't reliably available.
 | `agentsmith/scan.py` | `run`/`scan_file`/`scan_db` (the everywhere-scanner behind `asmith redact`). |
 | `agentsmith/export.py` | Atomic portable bundle writer (manifest, hashes, normalized and native files). |
 | `agentsmith/continuation.py` | Export/dump ingestion, prepared handoffs, and destination launch commands. |
+| `agentsmith/receipt.py` | Exact-path snapshots, sealed change ledgers, drift audit, and rollback. |
 | `agentsmith/environment.py` | Allowlists for portable project/user agent instructions and configuration. |
 | `agentsmith/config.py` | Shared paths (`CACHE_DIR`, `STATE_DIR`, `HARNESSES`). |
 | `agentsmith/backends/base.py` | The `Backend` ABC + shared id/path resolution helpers. |
@@ -88,6 +89,10 @@ global imports preserve verified `source/`, create an editable `candidate/`, and
 the same `HANDOFF.md` convention as project imports. Candidate deletion is an
 explicit exclusion. The handoff requires critical policy/dependency review and user
 approval before a launched agent changes live configuration.
+It also requires a durable change receipt: enumerate exact live targets, run
+`snapshot` after approval and before writes, then `audit --seal`. Broad home/root
+targets are refused. `rollback` verifies all baseline copies before changing
+anything, restores pre-existing targets, and removes tracked targets newly created.
 
 Usage summaries are cached per session under `~/.cache/asmith/usage/`, keyed by
 the native artifacts' paths, mtimes, and sizes. Both usage and Claude index caches

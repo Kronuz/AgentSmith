@@ -109,6 +109,65 @@ class BackendFixturesTest(unittest.TestCase):
             check=check,
         )
 
+    def test_change_receipt_audits_and_rolls_back_exact_paths(self) -> None:
+        existing = self.root / "live-config.toml"
+        existing.write_text("before\n")
+        created = self.root / "new-skill"
+        receipt = self.root / "change-receipt"
+
+        snapshotted = self.run_cli(
+            "snapshot",
+            str(existing),
+            str(created),
+            "-o",
+            str(receipt),
+        )
+        self.assertEqual(snapshotted.stdout.strip(), str(receipt.resolve()))
+        existing.write_text("after\n")
+        created.mkdir()
+        (created / "SKILL.md").write_text("# imported\n")
+
+        sealed = self.run_cli("audit", str(receipt), "--seal")
+        self.assertIn("modified", sealed.stdout)
+        self.assertIn("created", sealed.stdout)
+        clean = self.run_cli("audit", str(receipt))
+        self.assertIn("0 drifted", clean.stdout)
+
+        existing.write_text("drift\n")
+        drifted = self.run_cli("audit", str(receipt), check=False)
+        self.assertEqual(drifted.returncode, 1)
+        self.assertIn("1 drifted", drifted.stdout)
+
+        preview = self.run_cli("rollback", str(receipt), "--dry-run")
+        self.assertIn("would be restored", preview.stdout)
+        self.assertEqual(existing.read_text(), "drift\n")
+        self.assertTrue(created.is_dir())
+
+        rolled_back = self.run_cli("rollback", str(receipt), "-y")
+        self.assertIn("restored 2 path(s)", rolled_back.stdout)
+        self.assertEqual(existing.read_text(), "before\n")
+        self.assertFalse(created.exists())
+
+        fake_home = self.root / "receipt-home"
+        fake_home.mkdir()
+        original_home = self.env.get("HOME")
+        self.env["HOME"] = str(fake_home)
+        try:
+            refused = self.run_cli(
+                "snapshot",
+                str(fake_home),
+                "-o",
+                str(self.root / "broad-receipt"),
+                check=False,
+            )
+        finally:
+            if original_home is None:
+                self.env.pop("HOME", None)
+            else:
+                self.env["HOME"] = original_home
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("refusing broad snapshot target", refused.stderr)
+
     def _copilot(self) -> None:
         home = Path(self.env["COPILOT_HOME"])
         home.mkdir(parents=True)
@@ -547,6 +606,9 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn(
             "Consolidate overlapping instruction sources", import_instructions
         )
+        self.assertIn("asmith snapshot PATH... -o RECEIPT", import_instructions)
+        self.assertIn("asmith audit RECEIPT --seal", import_instructions)
+        self.assertIn("asmith rollback RECEIPT --dry-run", import_instructions)
         self.assertTrue((global_staging / "candidate").is_dir())
         self.assertTrue((global_staging / "source").is_dir())
         fake_bin = self.root / "bin"
@@ -567,6 +629,12 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn(f"-C {self.cwd.resolve()}", launched.stdout)
         self.assertIn("Read and follow the handoff", launched.stdout)
         self.assertNotIn("perform exhaustive ingestion", launched.stdout)
+        launched_default = self.run_cli(
+            "launch",
+            "codex",
+            str(global_staging / "HANDOFF.md"),
+        )
+        self.assertIn(f"-C {global_staging.resolve()}", launched_default.stdout)
         import_help = self.run_cli("import", "--help")
         self.assertNotIn("--harness", import_help.stdout)
         self.assertNotIn("--to", import_help.stdout)

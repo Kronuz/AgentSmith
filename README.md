@@ -124,6 +124,9 @@ the full id).
 | `asmith import SOURCE… [-o PREPARED]` | Build an agent-neutral handoff from existing bundles/dumps. Global imports create an editable `candidate/` and critical-review `HANDOFF.md`. |
 | `asmith launch AGENT HANDOFF` | Launch an agent with a prepared directory, its printed `HANDOFF.md`, or any standalone handoff file. `--cwd` selects the workspace. |
 | `asmith merge [TARGET…] [-o PREPARED]` | Discover and normalize live sessions selected by project paths or unique ids/prefixes into one agent-neutral handoff. |
+| `asmith snapshot PATH… -o RECEIPT` | Snapshot exact paths before an agent changes live configuration. |
+| `asmith audit RECEIPT [--seal]` | Seal the approved post-change state or detect later drift. |
+| `asmith rollback RECEIPT` | Restore the exact baseline and remove newly created tracked paths. `--dry-run`, `-y`. |
 | `asmith search <query…>` | Literal-phrase search across sessions (Copilot FTS5; Claude/Codex scan), merged by recency. |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
 | `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under all harness homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
@@ -263,8 +266,8 @@ asmith export --global -o ~/exports/globals
 - Accepts one or more AgentSmith bundles, native `.jsonl`/`.jsonl.gz` dumps, or
   archive directories. Multiple sources become one handoff.
 - `--from copilot|claude|codex`: resolve an ambiguous native dump dialect.
-- `--cwd PROJECT`: workspace recorded in a project/session handoff; default current
-  directory.
+- `--cwd PROJECT`: explicit launch workspace. Project/session imports default to the
+  current directory; global imports default to their prepared directory.
 - `-o/--out PREPARED`: new review directory; otherwise use the XDG state directory.
 - `-v/--verbose`: describe the handoff and suggested launch command on stderr.
 
@@ -304,9 +307,51 @@ asmith merge ~/code/api ~/code/web 10b72094 \
 - `HANDOFF`: prepared directory, its `HANDOFF.md`, or any standalone document.
 - `--cwd PROJECT`: workspace for standalone files or an override for a prepared
   handoff. The directory must already exist; otherwise nothing is launched.
+- Prepared project handoffs use their recorded project cwd. Prepared global imports
+  use their prepared directory unless `import --cwd` recorded another workspace.
 
 Launch uses the selected CLI's YOLO mode and starts a new native session; it never
 fabricates private session-store records.
+
+`asmith snapshot PATH… -o RECEIPT`
+
+- Creates a new durable receipt containing the exact pre-change state of every
+  selected file, directory, or not-yet-existing path.
+- Targets must be exact and non-overlapping. Broad targets such as `/` or the whole
+  home directory are refused.
+- Keep the receipt outside every tracked path. For global migrations, keep it outside
+  the destination agent home and disposable export/import directories, normally under
+  `~/.local/state/agentsmith/receipts/`.
+- `-v/--verbose` describes the snapshot on stderr; stdout remains the receipt path.
+
+After the approved writes, seal the post-change ledger:
+
+```sh
+receipt=$(asmith snapshot ~/.codex/AGENTS.md ~/.codex/skills/imported \
+  -o ~/.local/state/agentsmith/receipts/global-20260724)
+# perform only the approved writes
+asmith audit "$receipt" --seal
+```
+
+`asmith audit RECEIPT` then compares live state with the sealed state and exits
+nonzero if anything drifted. Before sealing, it compares with the baseline.
+
+`asmith rollback RECEIPT`
+
+- Restores modified or deleted targets from verified baseline copies.
+- Removes tracked targets that did not exist before the snapshot.
+- `--dry-run` inventories the rollback without writing.
+- Confirmation is required unless `-y/--yes` is supplied.
+
+```sh
+asmith rollback "$receipt" --dry-run
+asmith rollback "$receipt" -y
+```
+
+Generated global-import handoffs require the destination agent to enumerate all
+proposed live paths, obtain approval, snapshot before its first live write, seal
+afterward, and report the complete ledger and rollback commands. If an additional
+path becomes necessary, the agent must stop and obtain approval for a new snapshot.
 
 ### Manage data
 
