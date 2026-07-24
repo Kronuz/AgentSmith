@@ -161,6 +161,28 @@ def _bundle_conversations(source: Path) -> tuple[list[str], int, list[str]]:
             warnings.append(
                 f"missing normalized conversation for {harness}:{session_id}"
             )
+    environment = manifest.get("environment")
+    if isinstance(environment, list) and environment:
+        lines = [
+            "## Staged agent environment",
+            "",
+            (
+                "These files are preserved for review. Reconcile them with the "
+                "destination project/machine; do not blindly overwrite active "
+                "configuration."
+            ),
+            "",
+        ]
+        for entry in environment:
+            if isinstance(entry, dict):
+                lines.append(
+                    f"- `{entry.get('path', '?')}` "
+                    f"({entry.get('scope', '?')}, {entry.get('harness', '?')})"
+                )
+        conversations.append("\n".join(lines))
+        warnings.append(
+            f"{len(environment)} environment file(s) staged for review, not installed"
+        )
     return conversations, len(sessions), warnings
 
 

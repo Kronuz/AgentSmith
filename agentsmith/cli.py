@@ -474,8 +474,10 @@ def cmd_dump(args: argparse.Namespace) -> None:
 def cmd_export(args: argparse.Namespace) -> None:
     backends = select_backends(args.harness)
     pairs: list[tuple[Backend, Session]] = []
+    project_root: Path | None = None
     if looks_like_path(args.target):
         root = real(args.target)
+        project_root = Path(root)
         prefix = root.rstrip(os.sep) + os.sep
         for backend in backends:
             for session in backend.list_sessions():
@@ -489,6 +491,8 @@ def cmd_export(args: argparse.Namespace) -> None:
             die(f"no sessions {scope} directory: {root}")
     else:
         pairs.append(resolve(backends, args.target))
+        if pairs[0][1].cwd:
+            project_root = Path(pairs[0][1].cwd)
     pairs.sort(key=lambda pair: parse_ts(pair[1].updated_at))
 
     render_args = argparse.Namespace(
@@ -514,9 +518,11 @@ def cmd_export(args: argparse.Namespace) -> None:
             Path(args.out),
             target=args.target,
             include_memory=args.include_memory,
+            include_environment=args.include_environment,
+            project_root=project_root,
             recursive=args.recursive,
         )
-    except FileExistsError as exc:
+    except (FileExistsError, ValueError) as exc:
         die(str(exc))
     print(
         green(
@@ -1430,6 +1436,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-memory",
         action="store_true",
         help="include attributable project-scoped memory (shared across sessions)",
+    )
+    sp.add_argument(
+        "--include-environment",
+        action="store_true",
+        help="include project/user instructions, settings, hooks, commands, and skills "
+        "(may contain secrets; excludes auth and session stores)",
     )
     sp.set_defaults(func=cmd_export)
 

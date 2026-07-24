@@ -27,6 +27,8 @@ class BackendFixturesTest(unittest.TestCase):
             **os.environ,
             "PYTHONPATH": str(ROOT),
             "ASMITH_CACHE": str(self.root / "cache"),
+            "ASMITH_ENV_HOME": str(self.root / "portable-home"),
+            "ASMITH_STATE": str(self.root / "state"),
             "COPILOT_HOME": str(self.root / "copilot"),
             "COPILOT_DB": str(self.root / "copilot" / "session-store.db"),
             "COPILOT_STATE": str(self.root / "copilot" / "session-state"),
@@ -339,6 +341,44 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("prepared 1 recovered session(s)", raw_result.stdout)
         self.assertIn("raw dump may omit", raw_result.stderr)
         self.assertIn("hello there", (raw_prepared / "HANDOFF.md").read_text())
+
+    def test_export_and_import_stage_agent_environment(self) -> None:
+        (self.cwd / "AGENTS.md").write_text("# project instructions\n")
+        project_hook = self.cwd / ".claude" / "hooks" / "check.sh"
+        project_hook.parent.mkdir(parents=True)
+        project_hook.write_text("#!/bin/sh\n")
+        user_config = Path(self.env["ASMITH_ENV_HOME"]) / ".codex" / "config.toml"
+        user_config.parent.mkdir(parents=True)
+        user_config.write_text("model = 'fixture'\n")
+        auth = user_config.parent / "auth.json"
+        auth.write_text('{"secret":"must-not-export"}\n')
+
+        bundle = self.root / "environment-bundle"
+        self.run_cli(
+            "export",
+            str(self.cwd),
+            "--include-environment",
+            "-o",
+            str(bundle),
+        )
+        manifest = json.loads((bundle / "manifest.json").read_text())
+        paths = {entry["path"] for entry in manifest["environment"]}
+        self.assertIn("environment/project/shared/AGENTS.md", paths)
+        self.assertIn("environment/project/claude/.claude/hooks/check.sh", paths)
+        self.assertIn("environment/user/codex/.codex/config.toml", paths)
+        self.assertFalse(any("auth.json" in path for path in paths))
+
+        prepared = self.root / "environment-import"
+        result = self.run_cli(
+            "import",
+            str(bundle),
+            "--to",
+            "claude",
+            "-o",
+            str(prepared),
+        )
+        self.assertIn("staged for review", result.stderr)
+        self.assertIn("Staged agent environment", (prepared / "HANDOFF.md").read_text())
 
     def test_search_uses_literal_phrase_across_backends(self) -> None:
         result = self.run_cli("search", "hello", "there", "-n", "10")
