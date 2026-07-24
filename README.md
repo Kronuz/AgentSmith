@@ -1,4 +1,4 @@
-# Agentsmith (`asmith`)
+# AgentSmith (`asmith`)
 
 A swiss-army knife for your AI coding-agent sessions, across **three harnesses**:
 
@@ -9,7 +9,7 @@ A swiss-army knife for your AI coding-agent sessions, across **three harnesses**
 List the directories that have sessions, find/resume the right one, render full
 conversations (with nested subagents), full-text search, token/AIU accounting,
 and completely shred local session state you want gone. The project is
-**Agentsmith**, and
+**AgentSmith**, and
 the command is `asmith` (as in *Agent Smith* — the one who tracks sessions down
 and erases them).
 
@@ -34,7 +34,7 @@ Two parts:
 Source the shell file from your `~/.profile` (or `~/.zshrc` / `~/.bashrc`):
 
 ```sh
-[ -r "$HOME/code/Agentsmith/agentsmith.sh" ] && . "$HOME/code/Agentsmith/agentsmith.sh"
+[ -r "$HOME/code/AgentSmith/agentsmith.sh" ] && . "$HOME/code/AgentSmith/agentsmith.sh"
 ```
 
 That single line defines `asmith`, all three agent wrappers, aliases, and **tab
@@ -135,7 +135,7 @@ the full id).
 | `asmith stats` | Per-harness totals (sessions, resumable, dirs, span). `--usage` adds AIU. |
 | `asmith rm <id/path…>` (`prune`) | **Shred local state** for session(s). Path targets are exact unless `--recursive` is explicit. `-y`, `--dry-run`, `-v`, `--aggressive`. |
 | `asmith purge` | Shred all **empty** sessions (no transcript, 0 turns). `-y`, `--dry-run`, `-v`, `-H`. |
-| `asmith resume [-H h] [target]` | Resume a session—`target` is a directory (default cwd), full id, or unique id prefix (shell; launches the right CLI). |
+| `asmith resume AGENT [DIR]` | Resume the selected agent's newest resumable session for `DIR` (default: current directory). |
 | `asmith cd [session]` | `cd` into a session's on-disk location (shell). |
 | `asmith ids` | Print session ids, one per line (scripting / completion). `--full` for full uuids. |
 | `asmith completion <bash\|zsh>` | Print the tab-completion script for your shell. |
@@ -145,7 +145,7 @@ the full id).
 Every command supports `-h/--help`. Commands that read agent stores also support
 `-H/--harness copilot|claude|codex|all` (default `all`) and `--no-color`.
 `SESSION`/`TARGET` accepts a full id, a **unique id prefix**, or a path where
-documented. A prefix is never a wildcard: Agentsmith rejects it if zero or multiple
+documented. A prefix is never a wildcard: AgentSmith rejects it if zero or multiple
 sessions match. Paths are exact for `export`, `merge`, and `rm` unless the command's
 explicit `--recursive` option is supplied.
 
@@ -268,7 +268,7 @@ asmith export --global -o ~/exports/globals
 
 `asmith import SOURCE… [-o PREPARED]`
 
-- Accepts one or more Agentsmith bundles, native `.jsonl`/`.jsonl.gz` dumps, or
+- Accepts one or more AgentSmith bundles, native `.jsonl`/`.jsonl.gz` dumps, or
   archive directories. Multiple sources become one handoff.
 - `--from copilot|claude|codex`: resolve an ambiguous native dump dialect.
 - `--cwd PROJECT`: workspace recorded in a project/session handoff; default current
@@ -341,7 +341,12 @@ fabricates private session-store records.
 
 `asmith completion bash|zsh` prints the completion program to source from the shell.
 The sourced `agentsmith.sh` also provides `asmith resume` and `asmith cd`, which must
-run in the calling shell to launch interactively or change its directory.
+run in the calling shell to launch interactively or change its directory:
+
+```sh
+asmith resume codex                 # newest Codex session for cwd
+asmith resume claude ~/code/project # newest Claude session for DIR
+```
 
 ## The agent wrappers
 
@@ -448,7 +453,7 @@ prepared import. A launched agent must present a keep/adapt/omit plan and receiv
 explicit approval before changing live configuration.
 
 The destination adapter starts a **new native session** with instructions to read
-the handoff. Agentsmith does not fabricate private JSONL/SQLite records. `merge`
+the handoff. AgentSmith does not fabricate private JSONL/SQLite records. `merge`
 uses the same export/import pipeline, orders live sessions chronologically, retains
 their native artifacts, and leaves every original untouched.
 
@@ -462,7 +467,7 @@ extract objectives, decisions, constraints, open tasks, unresolved questions, an
 referenced files; anything unreadable, unsupported, duplicated, or omitted must be
 named explicitly. Transcript chunks are read through normal agent tools so those
 reads, the coverage ledger, and the consolidated state are recorded in the new native
-session. Agentsmith does not fake alternating historical roles or write private
+session. AgentSmith does not fake alternating historical roles or write private
 session-store records. This avoids reducing a large migration to a vague overview
 while preserving provenance.
 

@@ -1,4 +1,4 @@
-# Agentsmith Tutorial
+# AgentSmith Tutorial
 
 A hands-on tour of `asmith`, the swiss-army knife for your Copilot CLI, Claude
 Code, and Codex CLI sessions. Every example is a real command; output is trimmed
@@ -7,7 +7,7 @@ for brevity.
 If you haven't yet, add this to your shell rc and open a new shell:
 
 ```sh
-[ -r "$HOME/code/Agentsmith/agentsmith.sh" ] && . "$HOME/code/Agentsmith/agentsmith.sh"
+[ -r "$HOME/code/AgentSmith/agentsmith.sh" ] && . "$HOME/code/AgentSmith/agentsmith.sh"
 ```
 
 That gives you `asmith`, the `copilot()` / `claude()` / `codex()` auto-resume
@@ -40,12 +40,12 @@ bundles/dumps ─ import ──┘
 $ asmith recent            # what was I just working on, across all agents?
 $ asmith ls --here         # sessions for the current directory
 $ asmith tree              # everything grouped by directory
-$ asmith resume            # reopen the newest resumable session for this dir
+$ asmith resume codex      # reopen the newest Codex session for this dir
 $ asmith dump <id>         # read a whole conversation
 ```
 
 Anywhere you see `<id>` you can pass a full id or a **unique id prefix**
-(`413fc324`). A prefix is not a wildcard: Agentsmith refuses it if more than one
+(`413fc324`). A prefix is not a wildcard: AgentSmith refuses it if more than one
 session matches. Commands that document a path also accept `.`, `~/code/foo`, and
 other filesystem paths.
 
@@ -90,17 +90,17 @@ short hash or full id). Claude sessions are always resumable.
 Reopen one:
 
 ```console
-$ asmith resume                    # newest resumable session for the current dir
+$ asmith resume copilot            # newest Copilot session for the current dir
 asmith: resuming copilot session 413fc324
-$ asmith resume ~/code/other       # ...for another dir
-$ asmith resume ee22a500           # ...a specific session by its short hash/prefix
-$ asmith resume -H claude          # force the Claude one
+$ asmith resume claude ~/code/other # newest Claude session for another directory
+$ asmith resume codex .             # explicit current-directory spelling
 ```
 
 The hash you see in listings (`ee22a500`) is just a short form of the full UUID;
-`asmith resume` (and every other command) takes it directly. Need the full id?
-`asmith resolve ee22a500` prints it. Trying to resume a `.`-marked session gives a
-clear "not resumable" error rather than a silent failure.
+session-oriented inspection commands take it directly. `asmith resume` deliberately
+selects by `AGENT [DIR]`; use the native agent CLI to reopen a specific id. Need the
+full id? `asmith resolve ee22a500` prints it. Trying to resume a directory whose
+matching session is marked `.` gives a clear "not resumable" error.
 
 Or just type the agent's name — the wrappers auto-resume the current directory's
 newest session, and pass through untouched when you give arguments:
@@ -154,7 +154,7 @@ archives and cross-agent continuation, use the export/import workflow next.
 
 ## 4. Moving and continuing work
 
-Agentsmith has two deliberately separate scopes:
+AgentSmith has two deliberately separate scopes:
 
 - **Project/session bundles** contain conversations, native session artifacts,
   memory, and project-scoped agent context.
@@ -168,7 +168,7 @@ The nouns matter:
 
 - `TARGET` is a live session id, unique id prefix, or project path selected by
   `export`/`merge`. Path selection is exact unless `--recursive` is explicit.
-- `BUNDLE` is a checksummed, immutable Agentsmith export.
+- `BUNDLE` is a checksummed, immutable AgentSmith export.
 - `SOURCE` is an existing bundle, dump, compressed dump, or archive consumed by
   `import`.
 - `PREPARED` is the reviewable directory produced by `import` or `merge`.
@@ -267,7 +267,7 @@ $ asmith import old-events.jsonl.gz --from copilot
 $ asmith import old-session-archive/
 ```
 
-Agentsmith auto-detects normal Claude/Codex/Copilot JSONL. `--from` resolves an
+AgentSmith auto-detects normal Claude/Codex/Copilot JSONL. `--from` resolves an
 ambiguous dump. A directory source normalizes every recognizable top-level
 `.jsonl`/`.jsonl.gz` transcript and preserves the entire directory, including companion
 files. Raw recovery cannot restore memory, child sessions, or sidecars that were never
@@ -280,7 +280,7 @@ $ asmith merge ~/code/project -o ~/imports/merged
 $ asmith launch codex ~/imports/merged/HANDOFF.md
 ```
 
-`import` consumes artifacts you already have: Agentsmith bundles, native dumps, or
+`import` consumes artifacts you already have: AgentSmith bundles, native dumps, or
 archive directories. `merge` starts from a live project path, discovers every current
 Claude/Codex/Copilot session associated with it, and feeds a temporary export through
 the same normalization pipeline. It leaves every original session untouched.
@@ -314,7 +314,7 @@ $ asmith launch copilot ./NEXT_STEPS.md --cwd ~/code/project
 
 Prepared continuations carry their workspace in `manifest.json`; `--cwd` overrides
 it. A standalone file uses the current directory unless `--cwd` is supplied. The
-selected directory must already exist or Agentsmith refuses to launch.
+selected directory must already exist or AgentSmith refuses to launch.
 
 ### Exhaustive ingestion in generated handoffs
 
@@ -582,7 +582,7 @@ owns the id automatically — you never qualify it.
 | List every session | `asmith ls` (path + name per row) |
 | List a dir's sessions | `asmith ls --here` |
 | Group sessions by dir / agent | `asmith tree` · `asmith tree --by agent` |
-| Reopen the last session here | `asmith resume` (or bare `copilot` / `claude` / `codex`) |
+| Reopen an agent's last session here | `asmith resume AGENT` (or bare `copilot` / `claude` / `codex`) |
 | Read a conversation | `asmith dump <id>` (`-t` tools, `-R` reasoning, `--md`, `--no-subagents`) |
 | Export a session/project | `asmith export <id/PROJECT…> -o BUNDLE` |
 | Export globals | `asmith export --global -o BUNDLE` (or target an agent home) |

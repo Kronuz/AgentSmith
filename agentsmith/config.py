@@ -1,4 +1,4 @@
-"""Shared paths and constants for Agentsmith."""
+"""Shared paths and constants for AgentSmith."""
 
 from __future__ import annotations
 

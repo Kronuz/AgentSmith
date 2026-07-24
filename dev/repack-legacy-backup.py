@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repack the July 2026 mixed agent backup into verified Agentsmith bundles.
+"""Repack the July 2026 mixed agent backup into verified AgentSmith bundles.
 
 This is intentionally conservative: originals are read-only, byte-identical dumps
 are deduplicated, uncertain cwd assignments get explicit unclassified bundles, and
@@ -557,7 +557,7 @@ def run(backup: Path, destination: Path) -> None:
             )
         global_counts = _global_bundle(backup, staging / "global")
         lines = [
-            "# Recovered Agentsmith exports",
+            "# Recovered AgentSmith exports",
             "",
             f"- Source: `{backup}`",
             f"- Unique sessions: {len(sessions)}",

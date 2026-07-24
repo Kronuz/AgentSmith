@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# agentsmith.sh — Agentsmith: a swiss-army knife for AI coding-agent sessions.
+# agentsmith.sh — AgentSmith: a swiss-army knife for AI coding-agent sessions.
 #
 # Source me from your ~/.profile / ~/.zshrc / ~/.bashrc:
-#     source ~/code/Agentsmith/agentsmith.sh
+#     source ~/code/AgentSmith/agentsmith.sh
 #
 # Provides `asmith` plus copilot()/claude()/codex() auto-resume wrappers.
 # Compatible with bash & zsh. All reporting lives in the `agentsmith` package next
@@ -29,17 +29,27 @@ asmith() {
   case "$cmd" in
     resume|r)
       shift
-      # optional -H/--harness passthrough; default: resolve across all harnesses
-      local hflag=""
-      case "$1" in
-        -H|--harness) hflag="-H $2"; shift 2 ;;
+      local h="${1:-}"
+      case "$h" in
+        copilot|claude|codex) shift ;;
+        *)
+          printf 'usage: asmith resume <copilot|claude|codex> [DIR]\n' >&2
+          return 2
+          ;;
       esac
-      # target may be a dir (default: cwd) OR a session id/prefix
-      local target="${1:-.}"
-      local out h id
-      out="$(_asmith_py resolve --resumable --with-harness --exact $hflag "$target")" || return 1
+      if [ "$#" -gt 1 ]; then
+        printf 'usage: asmith resume <copilot|claude|codex> [DIR]\n' >&2
+        return 2
+      fi
+      local dir="${1:-.}"
+      if [ ! -d "$dir" ]; then
+        printf 'asmith: directory does not exist: %s\n' "$dir" >&2
+        return 1
+      fi
+      local out id
+      out="$(_asmith_py resolve -H "$h" --resumable --with-harness --exact "$dir")" || return 1
       [ -z "$out" ] && return 1
-      h="${out%%$'\t'*}"; id="${out#*$'\t'}"
+      id="${out#*$'\t'}"
       printf 'asmith: resuming %s session %s\n' "$h" "${id%%-*}" >&2
       case "$h" in
         copilot) command copilot --resume="$id" --yolo ;;
@@ -59,8 +69,8 @@ asmith() {
       cat <<'EOF'
 
 Shell-only extras (from agentsmith.sh):
-  asmith resume [-H copilot|claude|codex] [dir]   resume newest resumable session for dir
-  asmith cd [sess]                          cd into a session's on-disk state dir
+  asmith resume <copilot|claude|codex> [DIR]  resume newest session for DIR (default: cwd)
+  asmith cd [SESSION]                         cd into a session's on-disk state dir
 EOF
       ;;
     *)
@@ -121,6 +131,14 @@ alias asdump='asmith dump'
 if [ -n "${ZSH_VERSION:-}" ]; then
   _asmith_complete() {
     local -a lines; local l
+    if [[ ${words[2]:-} == resume || ${words[2]:-} == r ]]; then
+      if (( CURRENT == 3 )); then
+        compadd -- copilot claude codex
+      else
+        _files -/ 2>/dev/null
+      fi
+      return
+    fi
     lines=("${(@f)$(asmith __complete -- "${(@)words[2,CURRENT]}" 2>/dev/null)}")
     for l in $lines; do
       if [[ $l == __DIRS__ ]]; then _files -/ 2>/dev/null
@@ -147,6 +165,14 @@ elif [ -n "${BASH_VERSION:-}" ]; then
   if command -v complete >/dev/null 2>&1; then
     _asmith_complete() {
       local cur="${COMP_WORDS[COMP_CWORD]}" out
+      if [[ "${COMP_WORDS[1]:-}" == resume || "${COMP_WORDS[1]:-}" == r ]]; then
+        if [ "$COMP_CWORD" -eq 2 ]; then
+          COMPREPLY=($(compgen -W "copilot claude codex" -- "$cur"))
+        else
+          COMPREPLY=($(compgen -d -- "$cur"))
+        fi
+        return
+      fi
       out="$(asmith __complete -- "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null)"
       COMPREPLY=()
       case "$out" in

@@ -328,7 +328,7 @@ def prepare_continuation(
 
         handoff = staging / "HANDOFF.md"
         header = (
-            "# Agentsmith continuation handoff\n\n"
+            "# AgentSmith continuation handoff\n\n"
             f"- Working directory: `{cwd.expanduser().resolve()}`\n"
             f"- Sources: {len(sources)}\n"
             f"- Recovered sessions: {session_count}\n\n"

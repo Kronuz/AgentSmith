@@ -1,10 +1,10 @@
-# AGENTS.md — Agentsmith
+# AGENTS.md — AgentSmith
 
 Guidance for AI agents (and humans) working on this project.
 
 ## What this is
 
-**Agentsmith** is a swiss-army knife for inspecting AI coding-agent sessions,
+**AgentSmith** is a swiss-army knife for inspecting AI coding-agent sessions,
 exposed as the `asmith` command. It reads (and can shred) the local session stores of
 three harnesses:
 
@@ -100,8 +100,8 @@ Copilot's store attributes these records to the parent and cannot always separat
 ### Adding a harness
 
 Implement every abstract method of `Backend`, then add it to `select_backends()`
-and the `HARNESSES` tuple. If it can produce a resume command, wire it into
-`asmith resume` (the shell) via the `harness` tag that `find --with-harness` prints.
+and the `HARNESSES` tuple. If it can resume, add the agent name to the shell
+`asmith resume AGENT [DIR]` dispatcher and its bash/zsh completion candidates.
 
 ## The shred (`asmith rm`)
 

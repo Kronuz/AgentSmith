@@ -56,6 +56,47 @@ class BackendFixturesTest(unittest.TestCase):
         )
         self.assertEqual(clean_user(text), "keep this user request")
 
+    def test_shell_resume_uses_agent_then_directory(self) -> None:
+        fake_bin = self.root / "resume-bin"
+        fake_bin.mkdir()
+        fake_codex = fake_bin / "codex"
+        fake_codex.write_text("#!/bin/sh\nprintf 'codex %s\\n' \"$*\"\n")
+        fake_codex.chmod(0o755)
+        env = dict(self.env)
+        env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
+        env["ASMITH_SCRIPT"] = str(ROOT / "agentsmith.sh")
+        env["TEST_RESUME_DIR"] = str(self.cwd)
+        resumed = subprocess.run(
+            [
+                "bash",
+                "-c",
+                (
+                    'source "$ASMITH_SCRIPT"; '
+                    "_asmith_py() { printf 'codex\\t77777777-7777-7777-7777-777777777777\\n'; }; "
+                    'asmith resume codex "$TEST_RESUME_DIR"'
+                ),
+            ],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        self.assertIn(
+            "codex resume 77777777-7777-7777-7777-777777777777", resumed.stdout
+        )
+        missing_agent = subprocess.run(
+            ["bash", "-c", 'source "$ASMITH_SCRIPT"; asmith resume'],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(missing_agent.returncode, 2)
+        self.assertIn(
+            "asmith resume <copilot|claude|codex> [DIR]",
+            missing_agent.stderr,
+        )
+
     def run_cli(
         self, *args: str, check: bool = True
     ) -> subprocess.CompletedProcess[str]:

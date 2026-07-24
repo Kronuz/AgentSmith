@@ -1763,7 +1763,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "bundle",
         metavar="BUNDLE",
-        help="checksummed Agentsmith export bundle",
+        help="checksummed AgentSmith export bundle",
     )
     sp.set_defaults(func=cmd_verify)
 
@@ -1785,7 +1785,7 @@ def build_parser() -> argparse.ArgumentParser:
         "sources",
         nargs="+",
         metavar="SOURCE",
-        help="Agentsmith bundle, native JSONL dump, compressed dump, or archive directory",
+        help="AgentSmith bundle, native JSONL dump, compressed dump, or archive directory",
     )
     sp.add_argument(
         "--global",
