@@ -534,12 +534,12 @@ are excluded: they are large immutable program data, not session state, and
 byte-redacting them could corrupt installed executables.
 
 ```sh
-asmith redact 'hunter2!' --dry-run       # find everywhere, totals only (read-only)
-asmith redact 'hunter2!' --dry-run -v     # ...and list every match (masked)
-asmith redact 'hunter2!' --dry-run -m 1   # quick "is it anywhere?" — stop at the first
-asmith redact 'hunter2!'                  # confirm, then overwrite every occurrence
+asmith redact 'example-leaked-value' --dry-run       # find everywhere (read-only)
+asmith redact 'example-leaked-value' --dry-run -v    # ...and list every match (masked)
+asmith redact 'example-leaked-value' --dry-run -m 1  # quick check; stop at the first
+asmith redact 'example-leaked-value'                 # confirm, then overwrite all
 asmith redact 'sk-[a-z0-9]+' --regex      # regex mode (default is literal — safer)
-asmith redact 'hunter2!' --mask '-'       # mask with a different character
+asmith redact 'example-leaked-value' --mask '-'      # use a different mask character
 ```
 
 - **`--dry-run` is the finder.** By default it counts **everything** (like `grep`, no
