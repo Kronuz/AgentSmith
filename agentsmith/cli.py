@@ -1831,7 +1831,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--review-only",
         action="store_true",
-        help="launch Codex with an enforced read-only sandbox",
+        help="launch in an enforced read-only sandbox (Codex only)",
     )
     sp.set_defaults(func=cmd_launch)
 
@@ -2119,17 +2119,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
-    argv = list(argv)
-    if argv and argv[0] == "export-global":
-        argv = ["export", "--global", *argv[1:]]
-    elif argv and argv[0] == "import-global":
-        argv = ["import", "--global", *argv[1:]]
-    elif argv and argv[0] == "launch" and "--to" in argv:
-        index = argv.index("--to")
-        if index + 1 < len(argv):
-            agent = argv[index + 1]
-            remainder = argv[1:index] + argv[index + 2 :]
-            argv = ["launch", agent, *remainder]
     args = build_parser().parse_args(argv)
     if getattr(args, "no_color", False):
         set_color(False)

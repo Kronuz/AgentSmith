@@ -535,6 +535,18 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertNotIn("==SUPPRESS==", top_help.stdout)
         self.assertNotIn("export-global", top_help.stdout)
         self.assertNotIn("import-global", top_help.stdout)
+        old_launch = self.run_cli(
+            "launch",
+            str(global_staging),
+            "--to",
+            "codex",
+            check=False,
+        )
+        self.assertNotEqual(old_launch.returncode, 0)
+        old_export_global = self.run_cli("export-global", "--help", check=False)
+        self.assertNotEqual(old_export_global.returncode, 0)
+        old_import_global = self.run_cli("import-global", "--help", check=False)
+        self.assertNotEqual(old_import_global.returncode, 0)
         export_help = self.run_cli("export", "--help")
         self.assertIn("TARGET", export_help.stdout)
         self.assertIn("BUNDLE", export_help.stdout)
