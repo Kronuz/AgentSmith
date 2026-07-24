@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +21,7 @@ from .backends import (
     resolve,
     select_backends,
 )
+from .continuation import launch_command, prepare_continuation
 from .export import ExportItem, export_bundle, verify_bundle
 from .model import CACHE_READ_WEIGHT, Msg, PurgeReport, SearchHit, Session
 from .usage_cache import usage_for
@@ -535,6 +537,40 @@ def cmd_verify(args: argparse.Namespace) -> None:
             f"verified {result.sessions} session(s), {result.files} checksummed file(s)"
         )
     )
+
+
+def cmd_import(args: argparse.Namespace) -> None:
+    cwd = Path(args.cwd).expanduser().resolve()
+    if not cwd.is_dir():
+        die(f"working directory does not exist: {cwd}")
+    try:
+        result = prepare_continuation(
+            [Path(source) for source in args.sources],
+            args.to,
+            cwd,
+            Path(args.out) if args.out else None,
+            args.source_harness,
+        )
+    except (FileExistsError, FileNotFoundError, ValueError, OSError) as exc:
+        die(str(exc))
+    print(
+        green(
+            f"prepared {result.sessions} recovered session(s) from "
+            f"{result.sources} source(s) at {result.root}"
+        )
+    )
+    print(f"handoff: {result.handoff}")
+    for warning in result.warnings:
+        print(yellow(f"warning: {warning}"), file=sys.stderr)
+    if args.launch:
+        command = launch_command(result, args.to, cwd)
+        print(dim("launching: " + " ".join(command[:2]) + " …"), file=sys.stderr)
+        try:
+            completed = subprocess.run(command, cwd=cwd, check=False)
+        except FileNotFoundError:
+            die(f"destination CLI is not installed or not on PATH: {command[0]}")
+        if completed.returncode:
+            raise SystemExit(completed.returncode)
 
 
 def cmd_search(args: argparse.Namespace) -> None:
@@ -1404,6 +1440,50 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("bundle", help="export DIRECTORY")
     sp.set_defaults(func=cmd_verify)
+
+    sp = sub.add_parser(
+        "import",
+        parents=[common],
+        help="prepare export bundle(s) or raw dump(s) for another agent",
+        description=(
+            "Create a reviewable continuation directory containing HANDOFF.md, a "
+            "manifest, and copies of every source. Export bundles are preferred; "
+            "Claude/Codex/Copilot JSONL dumps are accepted as a recovery fallback."
+        ),
+    )
+    sp.add_argument(
+        "sources",
+        nargs="+",
+        help="Agentsmith export DIRECTORY or native JSONL dump FILE",
+    )
+    sp.add_argument(
+        "--to",
+        choices=("copilot", "claude", "codex"),
+        required=True,
+        help="destination agent",
+    )
+    sp.add_argument(
+        "--from",
+        dest="source_harness",
+        choices=("copilot", "claude", "codex"),
+        help="source dump format (normally auto-detected)",
+    )
+    sp.add_argument(
+        "--cwd",
+        default=".",
+        help="destination working directory (default: current directory)",
+    )
+    sp.add_argument(
+        "-o",
+        "--out",
+        help="new continuation DIRECTORY (default: XDG state directory)",
+    )
+    sp.add_argument(
+        "--launch",
+        action="store_true",
+        help="launch the destination CLI in YOLO mode after preparing",
+    )
+    sp.set_defaults(func=cmd_import)
 
     sp = sub.add_parser("search", parents=[common], help="search across sessions")
     sp.add_argument("query", nargs="+", help="query terms")

@@ -301,6 +301,45 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertNotEqual(failed.returncode, 0)
         self.assertIn("size mismatch", failed.stdout)
 
+    def test_import_prepares_bundle_and_raw_dump_handoffs(self) -> None:
+        bundle = self.root / "bundle-import"
+        self.run_cli("export", str(self.cwd), "-o", str(bundle))
+        prepared = self.root / "prepared-bundle"
+        result = self.run_cli(
+            "import",
+            str(bundle),
+            "--to",
+            "codex",
+            "--cwd",
+            str(self.cwd),
+            "-o",
+            str(prepared),
+        )
+        self.assertIn("prepared 3 recovered session(s)", result.stdout)
+        handoff = (prepared / "HANDOFF.md").read_text()
+        self.assertIn("Destination agent: **codex**", handoff)
+        self.assertIn("hello there", handoff)
+        self.assertTrue((prepared / "sources" / "001-bundle-import").is_dir())
+
+        raw = (
+            Path(self.env["CLAUDE_HOME"])
+            / "projects"
+            / "fixture"
+            / "22222222-2222-2222-2222-222222222222.jsonl"
+        )
+        raw_prepared = self.root / "prepared-raw"
+        raw_result = self.run_cli(
+            "import",
+            str(raw),
+            "--to",
+            "copilot",
+            "-o",
+            str(raw_prepared),
+        )
+        self.assertIn("prepared 1 recovered session(s)", raw_result.stdout)
+        self.assertIn("raw dump may omit", raw_result.stderr)
+        self.assertIn("hello there", (raw_prepared / "HANDOFF.md").read_text())
+
     def test_search_uses_literal_phrase_across_backends(self) -> None:
         result = self.run_cli("search", "hello", "there", "-n", "10")
         self.assertIn("11111111", result.stdout)
