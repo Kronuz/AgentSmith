@@ -315,13 +315,12 @@ $ asmith launch copilot ./NEXT_STEPS.md --cwd ~/code/project
 Prepared continuations carry their workspace in `manifest.json`; `--cwd` overrides
 it. A standalone file uses the current directory unless `--cwd` is supplied.
 
-### Choose ingestion depth
+### Exhaustive ingestion
 
-Launch is exhaustive by default:
+Every launch uses the exhaustive ingestion protocol:
 
 ```console
 $ asmith launch codex ~/imports/combined/HANDOFF.md
-$ asmith launch codex ~/imports/combined/HANDOFF.md --ingest full
 ```
 
 The agent is instructed to read the handoff in chunks, inventory its manifest and
@@ -332,18 +331,12 @@ open tasks, unresolved questions, and referenced files. It must explicitly repor
 anything unreadable, unsupported, duplicated, or deliberately omitted. It reads
 transcript chunks through normal tools so the inspected material and its resulting
 ledger become durable turns in the new native session. It does not fabricate old
-user/assistant roles or write private JSONL/SQLite session records.
+user/assistant roles or write private JSONL/SQLite session records. This is mandatory:
+there is no lightweight mode that may silently skip preserved sources.
 
-For a faster but explicitly incomplete continuation:
-
-```console
-$ asmith launch codex ~/imports/combined/HANDOFF.md --ingest handoff
-```
-
-This uses `HANDOFF.md` as primary context and opens preserved sources only as needed.
-Even full mode cannot recover data that was never exported or guarantee perfect
-retention beyond an agent's finite context; its value is traceable coverage rather
-than a vague, unaudited summary.
+Exhaustive ingestion still cannot recover data that was never exported or guarantee
+perfect retention beyond an agent's finite context; its value is traceable coverage
+rather than a vague, unaudited summary.
 
 ### Export global agent configuration
 

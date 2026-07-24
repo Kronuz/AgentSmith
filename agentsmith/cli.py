@@ -771,7 +771,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
     schema = manifest.get("schema")
     if schema == "agentsmith-global-import":
         result = GlobalImportResult(root, handoff, int(manifest.get("files", 0)))
-        command = global_launch_command(result, args.agent, ingest=args.ingest)
+        command = global_launch_command(result, args.agent)
         cwd = Path.home()
     elif schema == "agentsmith-continuation":
         cwd_value = manifest.get("cwd")
@@ -793,7 +793,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
             int(manifest.get("sessions", 0)),
             [],
         )
-        command = launch_command(result2, args.agent, cwd, ingest=args.ingest)
+        command = launch_command(result2, args.agent, cwd)
     else:
         cwd = (
             Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd().resolve()
@@ -801,9 +801,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
         if not cwd.is_dir():
             die(f"working directory does not exist: {cwd}")
         try:
-            command = handoff_launch_command(
-                handoff, args.agent, cwd, ingest=args.ingest
-            )
+            command = handoff_launch_command(handoff, args.agent, cwd)
         except ValueError as exc:
             die(str(exc))
     print(f"handoff: {handoff}")
@@ -1855,12 +1853,6 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--cwd",
         help="workspace for a standalone handoff or override of the prepared workspace",
-    )
-    sp.add_argument(
-        "--ingest",
-        choices=("full", "handoff"),
-        default="full",
-        help="full coverage audit (default) or lightweight handoff-only reading",
     )
     sp.set_defaults(func=cmd_launch)
 

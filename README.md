@@ -302,8 +302,6 @@ asmith merge ~/code/api ~/code/web 10b72094 \
 - `HANDOFF`: prepared directory, its `HANDOFF.md`, or any standalone document.
 - `--cwd PROJECT`: workspace for standalone files or an override for a prepared
   continuation.
-- `--ingest full|handoff`: `full` is the default exhaustive coverage protocol;
-  `handoff` is a faster, explicitly incomplete handoff-only reading.
 
 Launch uses the selected CLI's YOLO mode and starts a new native session; it never
 fabricates private session-store records.
@@ -454,7 +452,8 @@ the handoff. Agentsmith does not fabricate private JSONL/SQLite records. `merge`
 uses the same export/import pipeline, orders live sessions chronologically, retains
 their native artifacts, and leaves every original untouched.
 
-Launch defaults to `--ingest full`. Before acting, the destination agent is instructed
+Every launch uses the exhaustive ingestion protocol. Before acting, the destination
+agent is instructed
 to read the complete handoff in chunks, inventory adjacent manifests and preserved
 sources, inspect every normalized conversation plus memory, project context,
 instructions, skills, hooks, and configuration, consult native artifacts for gaps,
@@ -467,11 +466,9 @@ session. Agentsmith does not fake alternating historical roles or write private
 session-store records. This avoids reducing a large migration to a vague overview
 while preserving provenance.
 
-`--ingest handoff` is an explicit speed/coverage tradeoff: it reads the handoff as
-primary context and consults preserved sources only as needed. No launch mode can
-recover information absent from a raw dump or defeat the destination model's finite
-context perfectly; full mode provides an auditable ingestion procedure rather than a
-claim of lossless model memory.
+No launch can recover information absent from a raw dump or defeat the destination
+model's finite context perfectly. The mandatory coverage protocol provides an
+auditable ingestion procedure rather than a claim of lossless model memory.
 
 `launch` also accepts an arbitrary handoff document; it is not limited to imports:
 

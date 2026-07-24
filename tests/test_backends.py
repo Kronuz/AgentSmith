@@ -554,13 +554,11 @@ class BackendFixturesTest(unittest.TestCase):
             "launch",
             "codex",
             str(standalone),
-            "--ingest",
-            "handoff",
             "--cwd",
             str(self.cwd),
         )
         self.assertIn(str(standalone), generic.stdout)
-        self.assertIn("lightweight mode", generic.stdout)
+        self.assertIn("perform exhaustive ingestion", generic.stdout)
 
         claude_global = self.root / "claude-global"
         self.run_cli(
