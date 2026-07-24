@@ -370,7 +370,7 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertTrue((copied / "plan.md").is_file())
         self.assertIn("hello there", (archive_prepared / "HANDOFF.md").read_text())
 
-    def test_export_and_import_stage_agent_environment(self) -> None:
+    def test_project_and_global_agent_context_stay_separate(self) -> None:
         (self.cwd / "AGENTS.md").write_text("# project instructions\n")
         project_hook = self.cwd / ".claude" / "hooks" / "check.sh"
         project_hook.parent.mkdir(parents=True)
@@ -385,16 +385,23 @@ class BackendFixturesTest(unittest.TestCase):
         self.run_cli(
             "export",
             str(self.cwd),
-            "--include-environment",
+            "--include-project-context",
             "-o",
             str(bundle),
         )
         manifest = json.loads((bundle / "manifest.json").read_text())
         paths = {entry["path"] for entry in manifest["environment"]}
-        self.assertIn("environment/project/shared/AGENTS.md", paths)
-        self.assertIn("environment/project/claude/.claude/hooks/check.sh", paths)
-        self.assertIn("environment/user/codex/.codex/config.toml", paths)
-        self.assertFalse(any("auth.json" in path for path in paths))
+        self.assertTrue(any(path.endswith("/shared/AGENTS.md") for path in paths))
+        self.assertTrue(
+            any(path.endswith("/claude/.claude/hooks/check.sh") for path in paths)
+        )
+        self.assertFalse(any("/global/" in path for path in paths))
+        self.assertTrue(
+            all(
+                entry["project_root"] == str(self.cwd.resolve())
+                for entry in manifest["environment"]
+            )
+        )
 
         prepared = self.root / "environment-import"
         result = self.run_cli(
@@ -407,6 +414,58 @@ class BackendFixturesTest(unittest.TestCase):
         )
         self.assertIn("staged for review", result.stderr)
         self.assertIn("Staged agent environment", (prepared / "HANDOFF.md").read_text())
+
+        global_bundle = self.root / "global-bundle"
+        global_export = self.run_cli(
+            "export-global",
+            "-o",
+            str(global_bundle),
+        )
+        self.assertIn("global agent configuration", global_export.stdout)
+        global_manifest = json.loads((global_bundle / "manifest.json").read_text())
+        global_paths = {entry["path"] for entry in global_manifest["environment"]}
+        self.assertIn("environment/global/codex/.codex/config.toml", global_paths)
+        self.assertFalse(any("auth.json" in path for path in global_paths))
+        self.assertFalse(any("AGENTS.md" in path for path in global_paths))
+
+        global_staging = self.root / "global-staging"
+        global_import = self.run_cli(
+            "import-global",
+            str(global_bundle),
+            "-o",
+            str(global_staging),
+        )
+        self.assertIn("staged", global_import.stdout)
+        import_instructions = (global_staging / "IMPORT.md").read_text()
+        self.assertIn("~/.codex/config.toml", import_instructions)
+
+        other = self.root / "other-work"
+        other.mkdir()
+        (other / "AGENTS.md").write_text("# other instructions\n")
+        other_id = "55555555-5555-5555-5555-555555555555"
+        _jsonl(
+            Path(self.env["CLAUDE_HOME"]) / "projects" / "other" / f"{other_id}.jsonl",
+            [
+                {
+                    "type": "user",
+                    "cwd": str(other),
+                    "timestamp": "2026-01-03T00:00:00Z",
+                    "message": {"content": "other project"},
+                }
+            ],
+        )
+        multi = self.root / "multi-project-bundle"
+        multi_result = self.run_cli(
+            "export",
+            str(self.cwd),
+            str(other),
+            "-o",
+            str(multi),
+        )
+        self.assertIn("exported 4 session(s)", multi_result.stdout)
+        multi_manifest = json.loads((multi / "manifest.json").read_text())
+        roots = {entry["project_root"] for entry in multi_manifest["environment"]}
+        self.assertEqual(roots, {str(self.cwd.resolve()), str(other.resolve())})
 
     def test_merge_prepares_all_live_sessions_without_modifying_them(self) -> None:
         destination = self.root / "merged"

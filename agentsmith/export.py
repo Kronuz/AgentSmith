@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .backends.base import Backend
-from .environment import collect_environment
+from .environment import collect_global_environment, collect_project_environment
 from .model import Session
 from .usage_cache import usage_for
 
@@ -64,10 +64,10 @@ def _inventory(root: Path) -> list[dict[str, object]]:
 def export_bundle(
     items: list[ExportItem],
     destination: Path,
-    target: str,
+    target: str | list[str],
     include_memory: bool,
-    include_environment: bool,
-    project_root: Path | None,
+    include_project_context: bool,
+    project_roots: list[Path],
     recursive: bool,
 ) -> None:
     """Atomically create a portable export directory."""
@@ -132,21 +132,21 @@ def export_bundle(
                 }
             )
 
-        environment: list[dict[str, str]] = []
-        if include_environment:
-            if project_root is None:
-                raise ValueError("cannot infer a project root for environment export")
-            for item in collect_environment(project_root):
-                target_path = staging / item.bundle_path
-                _copy_artifact(item.source, target_path)
-                environment.append(
-                    {
-                        "scope": item.scope,
-                        "harness": item.harness,
-                        "source": str(item.source),
-                        "path": str(item.bundle_path),
-                    }
-                )
+        environment: list[dict[str, str | None]] = []
+        if include_project_context:
+            for project_root in project_roots:
+                for item in collect_project_environment(project_root):
+                    target_path = staging / item.bundle_path
+                    _copy_artifact(item.source, target_path)
+                    environment.append(
+                        {
+                            "scope": item.scope,
+                            "harness": item.harness,
+                            "project_root": item.project_root,
+                            "source": str(item.source),
+                            "path": str(item.bundle_path),
+                        }
+                    )
 
         manifest = {
             "schema": "agentsmith-export",
@@ -155,7 +155,7 @@ def export_bundle(
             "target": target,
             "recursive": recursive,
             "include_memory": include_memory,
-            "include_environment": include_environment,
+            "include_project_context": include_project_context,
             "environment": environment,
             "sessions": manifest_sessions,
             "inventory": _inventory(staging),
@@ -167,6 +167,46 @@ def export_bundle(
         raise
 
 
+def export_global_bundle(destination: Path, harnesses: set[str] | None = None) -> int:
+    """Create a standalone bundle of user-wide agent configuration."""
+    destination = destination.expanduser().resolve()
+    if destination.exists():
+        raise FileExistsError(f"destination already exists: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(prefix=f".{destination.name}.", dir=destination.parent)
+    )
+    environment: list[dict[str, str | None]] = []
+    try:
+        for item in collect_global_environment(harnesses):
+            target_path = staging / item.bundle_path
+            _copy_artifact(item.source, target_path)
+            environment.append(
+                {
+                    "scope": item.scope,
+                    "harness": item.harness,
+                    "project_root": item.project_root,
+                    "source": str(item.source),
+                    "path": str(item.bundle_path),
+                }
+            )
+
+        manifest = {
+            "schema": "agentsmith-global-export",
+            "schema_version": SCHEMA_VERSION,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "environment": environment,
+            "sessions": list[object](),
+            "inventory": _inventory(staging),
+        }
+        _write_json(staging / "manifest.json", manifest)
+        staging.replace(destination)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return len(environment)
+
+
 def verify_bundle(root: Path) -> VerifyResult:
     root = root.expanduser().resolve()
     errors: list[str] = []
@@ -174,7 +214,10 @@ def verify_bundle(root: Path) -> VerifyResult:
         manifest = json.loads((root / "manifest.json").read_text())
     except (OSError, json.JSONDecodeError) as exc:
         return VerifyResult(0, 0, [f"cannot read manifest: {exc}"])
-    if manifest.get("schema") != "agentsmith-export":
+    if manifest.get("schema") not in {
+        "agentsmith-export",
+        "agentsmith-global-export",
+    }:
         errors.append("unsupported or missing manifest schema")
     if manifest.get("schema_version") != SCHEMA_VERSION:
         errors.append(f"unsupported schema version: {manifest.get('schema_version')!r}")

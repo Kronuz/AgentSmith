@@ -126,10 +126,35 @@ separate files that `asmith dump` merges in — a Claude session can have dozens
 Note the default view is a cleaned reconstruction (system reminders stripped, tool
 results truncated). Use `--raw` when you want the exact underlying file.
 
-For a portable archive, use `asmith export`. Unlike singular `dump`, a path exports
-every session whose cwd exactly matches it. Add `--recursive` for nested cwd paths
-and `--include-memory` for shared project memory. After copying it to another
-machine, run `asmith verify <bundle>` before using it.
+For a portable archive, use `asmith export`. Unlike singular `dump`, one or more
+paths export every exact-cwd session. Add `--recursive` for nested cwd paths.
+Native artifacts, memory, and project-scoped agent instructions/hooks/settings/
+skills are included by default; `--no-memory` and `--no-project-context` opt out.
+After copying it to another machine, run `asmith verify <bundle>`.
+
+Global agent configuration has a separate lifecycle:
+
+```console
+$ asmith export-global -o ~/exports/my-agent-config
+$ asmith import-global ~/exports/my-agent-config
+```
+
+This prevents global hooks or instructions from being duplicated into every project
+bundle. Authentication stores are excluded, but settings can contain inline secrets.
+
+Prepare an export—or an old native dump—for another agent:
+
+```console
+$ asmith import ~/exports/project-sessions --to codex --cwd ~/code/project
+$ asmith import old-events.jsonl.gz --from copilot --to claude -o ~/handoff
+$ asmith merge . --to codex --launch
+```
+
+The result contains `HANDOFF.md`, `manifest.json`, and copies of the inputs.
+`--launch` starts a fresh native destination session in YOLO mode; it does not edit
+the destination agent's private session database. Raw JSONL/GZ recovery cannot
+restore sidecars that were never saved, and imported environment files are staged
+for review rather than installed automatically.
 
 ---
 

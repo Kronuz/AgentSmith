@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,12 +14,14 @@ class EnvironmentFile:
     bundle_path: Path
     scope: str
     harness: str
+    project_root: str | None = None
 
 
 _PROJECT_PATHS: dict[str, tuple[str, ...]] = {
     "shared": ("AGENTS.md",),
     "claude": (
         "CLAUDE.md",
+        ".mcp.json",
         ".claude/settings.json",
         ".claude/settings.local.json",
         ".claude/commands",
@@ -100,37 +103,89 @@ def _files(path: Path) -> list[Path]:
     )
 
 
-def collect_environment(project_root: Path) -> list[EnvironmentFile]:
-    """Collect allowlisted project and user environment files.
-
-    Authentication/session stores are intentionally outside the allowlist. Settings
-    may still contain inline secrets, so callers must require explicit user opt-in.
-    """
-    home = Path.home()
-    override_home = os.environ.get("ASMITH_ENV_HOME")
-    if override_home:
-        home = Path(override_home).expanduser()
+def _collect(
+    scope: str,
+    root: Path,
+    mapping: dict[str, tuple[str, ...]],
+    prefix: Path,
+    project_root: str | None,
+) -> list[EnvironmentFile]:
     collected: list[EnvironmentFile] = []
     seen: set[tuple[Path, Path]] = set()
-    for scope, root, mapping in (
-        ("project", project_root.expanduser().resolve(), _PROJECT_PATHS),
-        ("user", home.resolve(), _USER_PATHS),
-    ):
-        for harness, relatives in mapping.items():
-            for relative_text in relatives:
-                base = root / relative_text
-                for source in _files(base):
-                    relative = (
-                        Path(relative_text)
-                        if base.is_file()
-                        else Path(relative_text) / source.relative_to(base)
-                    )
-                    bundle_path = Path("environment") / scope / harness / relative
-                    key = (source.resolve(), bundle_path)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    collected.append(
-                        EnvironmentFile(source, bundle_path, scope, harness)
-                    )
+    for harness, relatives in mapping.items():
+        for relative_text in relatives:
+            base = root / relative_text
+            for source in _files(base):
+                relative = (
+                    Path(relative_text)
+                    if base.is_file()
+                    else Path(relative_text) / source.relative_to(base)
+                )
+                bundle_path = prefix / harness / relative
+                key = (source.resolve(), bundle_path)
+                if key in seen:
+                    continue
+                seen.add(key)
+                collected.append(
+                    EnvironmentFile(source, bundle_path, scope, harness, project_root)
+                )
     return collected
+
+
+def collect_project_environment(project_root: Path) -> list[EnvironmentFile]:
+    """Collect context whose destination is one specific project."""
+    root = project_root.expanduser().resolve()
+    key = hashlib.sha256(str(root).encode()).hexdigest()[:12]
+    prefix = Path("environment") / "projects" / key
+    collected = _collect(
+        "project",
+        root,
+        _PROJECT_PATHS,
+        prefix,
+        str(root),
+    )
+    known = {item.source.resolve() for item in collected}
+    for directory, names, files in os.walk(root):
+        names[:] = [
+            name
+            for name in names
+            if name not in _EXCLUDED_PARTS and not (Path(directory) / name).is_symlink()
+        ]
+        base = Path(directory)
+        for filename, harness in (("AGENTS.md", "shared"), ("CLAUDE.md", "claude")):
+            source = base / filename
+            if filename not in files or source.resolve() in known:
+                continue
+            relative = source.relative_to(root)
+            collected.append(
+                EnvironmentFile(
+                    source,
+                    prefix / harness / relative,
+                    "project",
+                    harness,
+                    str(root),
+                )
+            )
+            known.add(source.resolve())
+    return collected
+
+
+def collect_global_environment(
+    harnesses: set[str] | None = None,
+) -> list[EnvironmentFile]:
+    """Collect user-wide agent configuration, never session/project state."""
+    home = Path(os.environ.get("ASMITH_ENV_HOME", Path.home())).expanduser().resolve()
+    mapping = _USER_PATHS
+    if harnesses is not None:
+        mapping = {
+            harness: paths
+            for harness, paths in _USER_PATHS.items()
+            if harness == "shared" or harness in harnesses
+        }
+    return _collect(
+        "global",
+        home,
+        mapping,
+        Path("environment") / "global",
+        None,
+    )

@@ -27,6 +27,12 @@ class ContinuationResult:
     warnings: list[str]
 
 
+@dataclass
+class GlobalImportResult:
+    root: Path
+    files: int
+
+
 def _json_lines(path: Path) -> Iterator[dict[str, Any]]:
     with (
         gzip.open(path, mode="rt", errors="replace")
@@ -337,3 +343,63 @@ def launch_command(result: ContinuationResult, harness: str, cwd: Path) -> list[
     if harness == "copilot":
         return ["copilot", "--yolo", prompt]
     raise ValueError(f"unsupported destination harness: {harness}")
+
+
+def prepare_global_import(
+    source: Path, destination: Path | None = None
+) -> GlobalImportResult:
+    """Stage a global configuration bundle without overwriting live configuration."""
+    source = source.expanduser().resolve()
+    verified = verify_bundle(source)
+    if verified.errors:
+        raise ValueError("invalid global bundle: " + "; ".join(verified.errors[:3]))
+    manifest = json.loads((source / "manifest.json").read_text())
+    if manifest.get("schema") != "agentsmith-global-export":
+        raise ValueError("bundle is not a global agent configuration export")
+    stamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+    root = destination or STATE_DIR / "global-imports" / f"{stamp}-agent-configuration"
+    root = root.expanduser().resolve()
+    if root.exists():
+        raise FileExistsError(f"destination already exists: {root}")
+    root.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{root.name}.", dir=root.parent))
+    environment = manifest.get("environment")
+    entries = environment if isinstance(environment, list) else []
+    try:
+        _copy_source(source, staging, 1)
+        lines = [
+            "# Global agent configuration import",
+            "",
+            (
+                "This is staged for review. Nothing has been installed. Compare each "
+                "file with its destination and merge deliberately; settings and hooks "
+                "can contain machine-specific commands or inline secrets."
+            ),
+            "",
+        ]
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            bundle_path = str(entry.get("path", "?"))
+            parts = Path(bundle_path).parts
+            relative = Path(*parts[3:]) if len(parts) > 3 else Path("?")
+            lines.append(
+                f"- `{bundle_path}` → `~/{relative}` ({entry.get('harness', '?')})"
+            )
+        (staging / "IMPORT.md").write_text("\n".join(lines) + "\n")
+        staged_manifest = {
+            "schema": "agentsmith-global-import",
+            "schema_version": 1,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "source": "sources/001-" + source.name,
+            "files": len(entries),
+            "instructions": "IMPORT.md",
+        }
+        (staging / "manifest.json").write_text(
+            json.dumps(staged_manifest, indent=2, ensure_ascii=False) + "\n"
+        )
+        staging.replace(root)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return GlobalImportResult(root, len(entries))

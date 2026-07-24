@@ -20,8 +20,9 @@ Two parts:
 
 - **`agentsmith/`** — the engine, a Python package (stdlib only, no dependencies):
   - `cli.py` (commands + argument parsing), `model.py` (dataclasses),
-    `util.py` (helpers), `export.py` (portable bundles), `purge.py` (the shred),
-    `config.py` (shared paths),
+    `util.py` (helpers), `export.py` (portable bundles),
+    `continuation.py` (cross-agent imports), `environment.py` (portable agent
+    configuration), `purge.py` (the shred), `config.py` (shared paths),
     and `backends/` with `base.py` (the `Backend` ABC), one module per harness,
     and `__init__.py` (selection + cross-harness resolution). Run it directly with
     `python -m agentsmith ...`.
@@ -118,8 +119,12 @@ the full id).
 | `asmith resolve [id/prefix/path]` | Print the **full** session id for a short hash/prefix/dir (`--resumable`, `--with-harness`). |
 | `asmith show <session>` | Metadata: cwd, repo/branch, times, turns, files, tokens/AIU, checkpoints, resume line. |
 | `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
-| `asmith export <id/path> -o DIR` | Create a portable, checksummed bundle. A path exports every exact-cwd session; `--recursive` includes nested cwd paths; `--include-memory` adds attributable project memory. |
+| `asmith export <id/path…> -o DIR` | Create a complete, checksummed project/session bundle. Multiple targets are accepted. Memory and project context are included by default; `--no-memory` / `--no-project-context` opt out. |
+| `asmith export-global -o DIR` | Separately export user-wide instructions, hooks, skills, and settings for every agent (`-H` narrows it). |
 | `asmith verify <bundle>` | Verify the export schema, safe relative paths, sizes, and every SHA-256 checksum. |
+| `asmith import <source…> --to AGENT` | Prepare verified export bundle(s), raw JSONL/GZ dump(s), or native archive directories as a reviewable continuation. `--launch` starts the destination CLI in YOLO mode. |
+| `asmith import-global <bundle>` | Stage a global configuration export with an `IMPORT.md` destination map; never overwrite live configuration. |
+| `asmith merge [path] --to AGENT` | Normalize all live sessions for a directory into one prepared continuation without modifying the originals. |
 | `asmith search <query…>` | Literal-phrase search across sessions (Copilot FTS5; Claude/Codex scan), merged by recency. |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
 | `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under all harness homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
@@ -179,20 +184,52 @@ the newest session, and `--raw` emits or copies that one native transcript. Use
 ```sh
 asmith export 10b72094 -o ~/exports/one-session
 asmith export . -o ~/exports/all-sessions-here
-asmith export ~/code/project --recursive --include-memory -o ~/exports/project
+asmith export ~/code/project --recursive -o ~/exports/project
+asmith export ~/code/one ~/code/two -o ~/exports/two-projects
+asmith export-global -o ~/exports/global-agent-config
 asmith verify ~/exports/project
 ```
 
-The destination must be new. Each bundle has a versioned `manifest.json` with a
-SHA-256 inventory, normalized `conversation.md`, metadata, usage and touched-file
-records, plus the harness's native session-owned files. Project memory is excluded
-unless explicitly requested because it can be shared by many sessions.
+The destination must be new. Project/session exports are complete by default:
+normalized conversation, metadata, usage, touched-file records, native artifacts,
+attributable memory, and project-scoped instructions/settings/hooks/skills. Use
+`--no-memory` or `--no-project-context` only when deliberately making a smaller
+bundle.
 
-Exports are portable archives for inspection and transfer, not fabricated native
-sessions. Native import and cross-agent merge require harness-specific adapters:
-copying JSONL between agents would not preserve tool-call pairing, compactions,
-indexes, or resumability. A safe cross-agent merge must create a new destination
-session from a normalized handoff while retaining the originals.
+Project and global scope never mix. In a multi-project export, each context is
+namespaced by its recorded project root and global files appear zero times. Use
+`export-global` once to move user-wide Claude/Codex/Copilot instructions, settings,
+hooks, commands, rules, and skills. Authentication and session stores are always
+excluded; settings can still contain inline secrets, so inspect before sharing.
+
+## Importing and merging
+
+Import creates a new directory under
+`$XDG_STATE_HOME/agentsmith/imports/` (normally
+`~/.local/state/agentsmith/imports/`) containing `HANDOFF.md`, a provenance
+manifest, and preserved source material:
+
+```sh
+asmith import ~/exports/project --to codex --cwd ~/code/project
+asmith import old-claude.jsonl old-copilot.jsonl.gz --to claude -o ~/handoff
+asmith import old-session-archive/ --to codex --launch
+asmith merge ~/code/project --to codex --launch
+asmith import-global ~/exports/global-agent-config
+```
+
+Exports are preferred. Native Claude, Codex, and Copilot JSONL dumps are a recovery
+fallback; gzip transcripts and archive directories containing `events.jsonl(.gz)`
+are supported. Dumps can omit memory, child sessions, usage, and sidecars, and the
+importer reports those limitations. Project context remains attached to its source
+project namespace. `import-global` creates `IMPORT.md` mapping each file to its
+user-home destination; it never silently installs over live configuration.
+
+The destination adapter starts a **new native session** with instructions to read
+the handoff. Agentsmith does not fabricate private JSONL/SQLite records. `merge`
+uses the same export/import pipeline, orders live sessions chronologically, retains
+their native artifacts, and leaves every original untouched. Exceptionally long
+histories can produce multi-megabyte handoffs; the destination should inspect them
+selectively rather than assuming the entire file fits in one context window.
 
 ## Shredding sessions (`asmith rm`)
 

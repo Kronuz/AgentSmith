@@ -12,7 +12,9 @@ three harnesses:
 - **claude** — Claude Code (`~/.claude`)
 - **codex** — OpenAI Codex CLI (`~/.codex`)
 
-Everything is read-only except `asmith rm` (session shred). There are **no
+Session inspection is read-only except `asmith rm` (session shred). `export`,
+`import`, and `merge` only write new user-selected/state directories and never
+mutate native session stores. There are **no
 AI/model-dependent commands** — an earlier `summarize`/`triage` pair was removed
 because it needed a working agent (`copilot -p`) that isn't reliably available.
 
@@ -27,7 +29,9 @@ because it needed a working agent (`copilot -p`) that isn't reliably available.
 | `agentsmith/purge.py` | `deep_purge` (the shred). |
 | `agentsmith/scan.py` | `run`/`scan_file`/`scan_db` (the everywhere-scanner behind `asmith redact`). |
 | `agentsmith/export.py` | Atomic portable bundle writer (manifest, hashes, normalized and native files). |
-| `agentsmith/config.py` | Shared paths (`CACHE_DIR`, `HARNESSES`). |
+| `agentsmith/continuation.py` | Export/dump ingestion, prepared handoffs, and destination launch commands. |
+| `agentsmith/environment.py` | Allowlists for portable project/user agent instructions and configuration. |
+| `agentsmith/config.py` | Shared paths (`CACHE_DIR`, `STATE_DIR`, `HARNESSES`). |
 | `agentsmith/backends/base.py` | The `Backend` ABC + shared id/path resolution helpers. |
 | `agentsmith/backends/copilot.py` | `CopilotBackend` + copilot store paths. |
 | `agentsmith/backends/claude.py` | `ClaudeBackend` + claude store paths. |
@@ -70,6 +74,16 @@ A package, three layers:
    (`copilot`/`claude`/`codex`/`all`, default `all`), then iterates. Session-specific
    commands resolve an id/prefix/path across all selected backends
    (`resolve()`), so ids never need a harness qualifier.
+
+`import` accepts verified export bundles plus native Claude/Codex/Copilot JSONL
+dumps, gzip dumps, and Copilot-style archive directories. It creates a reviewable
+`HANDOFF.md` and preserves every source; it never fabricates a destination store.
+`merge` feeds live sessions through the same export/import pipeline. Project context
+and attributable memory are included by default (`--no-*` opts out) and remain
+namespaced per project root. Global instructions/settings/hooks/skills use the
+separate `export-global` / `import-global` lifecycle, so they are never duplicated
+into project bundles. Both inventories exclude authentication/session stores;
+imports stage configuration for review instead of installing it.
 
 Usage summaries are cached per session under `~/.cache/asmith/usage/`, keyed by
 the native artifacts' paths, mtimes, and sizes. Both usage and Claude index caches

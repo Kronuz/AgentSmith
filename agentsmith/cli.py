@@ -22,8 +22,12 @@ from .backends import (
     resolve,
     select_backends,
 )
-from .continuation import launch_command, prepare_continuation
-from .export import ExportItem, export_bundle, verify_bundle
+from .continuation import (
+    launch_command,
+    prepare_continuation,
+    prepare_global_import,
+)
+from .export import ExportItem, export_bundle, export_global_bundle, verify_bundle
 from .model import CACHE_READ_WEIGHT, Msg, PurgeReport, SearchHit, Session
 from .usage_cache import usage_for
 from .util import (
@@ -522,16 +526,32 @@ def _export_items(pairs: list[tuple[Backend, Session]]) -> list[ExportItem]:
 
 def cmd_export(args: argparse.Namespace) -> None:
     backends = select_backends(args.harness)
-    pairs, project_root = _export_pairs(backends, args.target, args.recursive)
+    pairs: list[tuple[Backend, Session]] = []
+    project_roots: list[Path] = []
+    seen_sessions: set[tuple[str, str]] = set()
+    seen_roots: set[Path] = set()
+    for target in args.targets:
+        target_pairs, project_root = _export_pairs(backends, target, args.recursive)
+        for pair in target_pairs:
+            key = (pair[0].name, pair[1].id)
+            if key not in seen_sessions:
+                seen_sessions.add(key)
+                pairs.append(pair)
+        if project_root is not None:
+            resolved_root = project_root.expanduser().resolve()
+            if resolved_root not in seen_roots:
+                seen_roots.add(resolved_root)
+                project_roots.append(resolved_root)
+    pairs.sort(key=lambda pair: parse_ts(pair[1].updated_at))
     items = _export_items(pairs)
     try:
         export_bundle(
             items,
             Path(args.out),
-            target=args.target,
+            target=args.targets,
             include_memory=args.include_memory,
-            include_environment=args.include_environment,
-            project_root=project_root,
+            include_project_context=args.include_project_context,
+            project_roots=project_roots,
             recursive=args.recursive,
         )
     except (FileExistsError, ValueError) as exc:
@@ -539,6 +559,20 @@ def cmd_export(args: argparse.Namespace) -> None:
     print(
         green(
             f"exported {len(items)} session(s) to "
+            f"{Path(args.out).expanduser().resolve()}"
+        )
+    )
+
+
+def cmd_export_global(args: argparse.Namespace) -> None:
+    try:
+        harnesses = None if args.harness == "all" else {args.harness}
+        count = export_global_bundle(Path(args.out), harnesses)
+    except (FileExistsError, ValueError, OSError) as exc:
+        die(str(exc))
+    print(
+        green(
+            f"exported {count} global agent configuration file(s) to "
             f"{Path(args.out).expanduser().resolve()}"
         )
     )
@@ -559,8 +593,8 @@ def cmd_merge(args: argparse.Namespace) -> None:
                 bundle,
                 target=args.path,
                 include_memory=args.include_memory,
-                include_environment=args.include_environment,
-                project_root=project_root,
+                include_project_context=args.include_project_context,
+                project_roots=[project_root] if project_root else [],
                 recursive=args.recursive,
             )
             result = prepare_continuation(
@@ -633,6 +667,21 @@ def cmd_import(args: argparse.Namespace) -> None:
             die(f"destination CLI is not installed or not on PATH: {command[0]}")
         if completed.returncode:
             raise SystemExit(completed.returncode)
+
+
+def cmd_import_global(args: argparse.Namespace) -> None:
+    try:
+        result = prepare_global_import(
+            Path(args.bundle), Path(args.out) if args.out else None
+        )
+    except (FileExistsError, FileNotFoundError, ValueError, OSError) as exc:
+        die(str(exc))
+    print(
+        green(
+            f"staged {result.files} global agent configuration file(s) at {result.root}"
+        )
+    )
+    print(f"review: {result.root / 'IMPORT.md'}")
 
 
 def cmd_search(args: argparse.Namespace) -> None:
@@ -1479,7 +1528,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _mark(
-        sp.add_argument("target", help="session id/prefix or directory path"),
+        sp.add_argument(
+            "targets",
+            nargs="+",
+            help="one or more session ids/prefixes or directory paths",
+        ),
         "both",
     )
     sp.add_argument("-o", "--out", required=True, help="new destination DIRECTORY")
@@ -1491,15 +1544,41 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--include-memory",
         action="store_true",
-        help="include attributable project-scoped memory (shared across sessions)",
+        default=True,
+        help=argparse.SUPPRESS,
     )
     sp.add_argument(
-        "--include-environment",
+        "--no-memory",
+        dest="include_memory",
+        action="store_false",
+        help="exclude attributable project-scoped memory",
+    )
+    sp.add_argument(
+        "--include-project-context",
         action="store_true",
-        help="include project/user instructions, settings, hooks, commands, and skills "
-        "(may contain secrets; excludes auth and session stores)",
+        default=True,
+        help=argparse.SUPPRESS,
+    )
+    sp.add_argument(
+        "--no-project-context",
+        dest="include_project_context",
+        action="store_false",
+        help="exclude project-scoped instructions, hooks, settings, and skills",
     )
     sp.set_defaults(func=cmd_export)
+
+    sp = sub.add_parser(
+        "export-global",
+        parents=[common],
+        help="export user-wide agent instructions, hooks, skills, and settings",
+        description=(
+            "Create a separate portable bundle for global Claude/Codex/Copilot "
+            "configuration. Authentication and session stores are excluded, but "
+            "settings may contain inline secrets. The destination must be new."
+        ),
+    )
+    sp.add_argument("-o", "--out", required=True, help="new destination DIRECTORY")
+    sp.set_defaults(func=cmd_export_global)
 
     sp = sub.add_parser(
         "verify",
@@ -1554,6 +1633,24 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_import)
 
     sp = sub.add_parser(
+        "import-global",
+        parents=[common],
+        help="stage a global agent configuration bundle for review",
+        description=(
+            "Prepare a global export on this machine without overwriting live "
+            "configuration. IMPORT.md maps every staged file to its user-home "
+            "destination."
+        ),
+    )
+    sp.add_argument("bundle", help="global export DIRECTORY")
+    sp.add_argument(
+        "-o",
+        "--out",
+        help="new staging DIRECTORY (default: XDG state directory)",
+    )
+    sp.set_defaults(func=cmd_import_global)
+
+    sp = sub.add_parser(
         "merge",
         parents=[common],
         help="merge a directory's live sessions into one prepared continuation",
@@ -1595,12 +1692,26 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--include-memory",
         action="store_true",
-        help="include attributable project-scoped memory",
+        default=True,
+        help=argparse.SUPPRESS,
     )
     sp.add_argument(
-        "--include-environment",
+        "--no-memory",
+        dest="include_memory",
+        action="store_false",
+        help="exclude attributable project-scoped memory",
+    )
+    sp.add_argument(
+        "--include-project-context",
         action="store_true",
-        help="include agent instructions/configuration (may contain secrets)",
+        default=True,
+        help=argparse.SUPPRESS,
+    )
+    sp.add_argument(
+        "--no-project-context",
+        dest="include_project_context",
+        action="store_false",
+        help="exclude project-scoped agent instructions/configuration",
     )
     sp.add_argument(
         "--launch",
