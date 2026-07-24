@@ -321,8 +321,6 @@ class BackendFixturesTest(unittest.TestCase):
         result = self.run_cli(
             "import",
             str(bundle),
-            "--to",
-            "codex",
             "--cwd",
             str(self.cwd),
             "-o",
@@ -330,7 +328,7 @@ class BackendFixturesTest(unittest.TestCase):
         )
         self.assertIn("prepared 3 recovered session(s)", result.stdout)
         handoff = (prepared / "HANDOFF.md").read_text()
-        self.assertIn("Destination agent: **codex**", handoff)
+        self.assertIn("This handoff is agent-neutral", handoff)
         self.assertIn("hello there", handoff)
         self.assertTrue((prepared / "sources" / "001-bundle-import").is_dir())
 
@@ -344,8 +342,6 @@ class BackendFixturesTest(unittest.TestCase):
         raw_result = self.run_cli(
             "import",
             str(raw),
-            "--to",
-            "copilot",
             "-o",
             str(raw_prepared),
         )
@@ -370,8 +366,6 @@ class BackendFixturesTest(unittest.TestCase):
         archive_result = self.run_cli(
             "import",
             str(archive),
-            "--to",
-            "claude",
             "-o",
             str(archive_prepared),
         )
@@ -393,8 +387,6 @@ class BackendFixturesTest(unittest.TestCase):
         multi_result = self.run_cli(
             "import",
             str(multi_archive),
-            "--to",
-            "copilot",
             "-o",
             str(multi_prepared),
         )
@@ -445,8 +437,6 @@ class BackendFixturesTest(unittest.TestCase):
         result = self.run_cli(
             "import",
             str(bundle),
-            "--to",
-            "claude",
             "-o",
             str(prepared),
         )
@@ -516,6 +506,8 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn(str(global_staging / "HANDOFF.md"), launched.stdout)
         import_help = self.run_cli("import", "--help")
         self.assertNotIn("--harness", import_help.stdout)
+        self.assertNotIn("--to", import_help.stdout)
+        self.assertNotIn("--launch", import_help.stdout)
         self.assertIn("SOURCE", import_help.stdout)
         self.assertIn("PREPARED", import_help.stdout)
         launch_help = self.run_cli("launch", "--help")
@@ -542,6 +534,9 @@ class BackendFixturesTest(unittest.TestCase):
         export_help = self.run_cli("export", "--help")
         self.assertIn("TARGET", export_help.stdout)
         self.assertIn("BUNDLE", export_help.stdout)
+        merge_help = self.run_cli("merge", "--help")
+        self.assertNotIn("--to", merge_help.stdout)
+        self.assertNotIn("--launch", merge_help.stdout)
 
         standalone = self.root / "standalone-handoff.md"
         standalone.write_text("# Continue this work\n")
@@ -603,8 +598,6 @@ class BackendFixturesTest(unittest.TestCase):
         result = self.run_cli(
             "merge",
             str(self.cwd),
-            "--to",
-            "codex",
             "-o",
             str(destination),
         )

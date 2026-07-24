@@ -642,7 +642,6 @@ def cmd_merge(args: argparse.Namespace) -> None:
             )
             result = prepare_continuation(
                 [bundle],
-                args.to,
                 cwd,
                 Path(args.out) if args.out else None,
             )
@@ -651,18 +650,9 @@ def cmd_merge(args: argparse.Namespace) -> None:
     print(
         green(f"merged {result.sessions} session(s) into continuation at {result.root}")
     )
-    _print_handoff(result.handoff, args.to)
+    _print_handoff(result.handoff)
     for warning in result.warnings:
         print(yellow(f"warning: {warning}"), file=sys.stderr)
-    if args.launch:
-        command = launch_command(result, args.to, cwd)
-        print(dim("launching: " + " ".join(command[:2]) + " …"), file=sys.stderr)
-        try:
-            completed = subprocess.run(command, cwd=cwd, check=False)
-        except FileNotFoundError:
-            die(f"destination CLI is not installed or not on PATH: {command[0]}")
-        if completed.returncode:
-            raise SystemExit(completed.returncode)
 
 
 def cmd_verify(args: argparse.Namespace) -> None:
@@ -697,15 +687,12 @@ def cmd_import(args: argparse.Namespace) -> None:
         args.bundle = args.sources[0]
         cmd_import_global(args)
         return
-    if not args.to:
-        die("project/session import requires --to copilot|claude|codex")
     cwd = Path(args.cwd).expanduser().resolve()
     if not cwd.is_dir():
         die(f"working directory does not exist: {cwd}")
     try:
         result = prepare_continuation(
             [Path(source) for source in args.sources],
-            args.to,
             cwd,
             Path(args.out) if args.out else None,
             args.source_harness,
@@ -718,18 +705,9 @@ def cmd_import(args: argparse.Namespace) -> None:
             f"{result.sources} source(s) at {result.root}"
         )
     )
-    _print_handoff(result.handoff, args.to)
+    _print_handoff(result.handoff)
     for warning in result.warnings:
         print(yellow(f"warning: {warning}"), file=sys.stderr)
-    if args.launch:
-        command = launch_command(result, args.to, cwd)
-        print(dim("launching: " + " ".join(command[:2]) + " …"), file=sys.stderr)
-        try:
-            completed = subprocess.run(command, cwd=cwd, check=False)
-        except FileNotFoundError:
-            die(f"destination CLI is not installed or not on PATH: {command[0]}")
-        if completed.returncode:
-            raise SystemExit(completed.returncode)
 
 
 def cmd_import_global(args: argparse.Namespace) -> None:
@@ -744,18 +722,7 @@ def cmd_import_global(args: argparse.Namespace) -> None:
             f"staged {result.files} global agent configuration file(s) at {result.root}"
         )
     )
-    _print_handoff(result.handoff, args.to)
-    if args.launch:
-        if not args.to:
-            die("--launch requires --to copilot|claude|codex")
-        command = global_launch_command(result, args.to)
-        print(dim("launching: " + " ".join(command[:2]) + " …"), file=sys.stderr)
-        try:
-            completed = subprocess.run(command, cwd=Path.home(), check=False)
-        except FileNotFoundError:
-            die(f"destination CLI is not installed or not on PATH: {command[0]}")
-        if completed.returncode:
-            raise SystemExit(completed.returncode)
+    _print_handoff(result.handoff)
 
 
 def cmd_launch(args: argparse.Namespace) -> None:
@@ -1729,9 +1696,9 @@ def build_parser() -> argparse.ArgumentParser:
         "import",
         help="prepare export bundle(s) or raw dump(s) for another agent",
         description=(
-            "Infer project/global scope from the bundle schema and create a reviewable "
-            "HANDOFF.md. Project/session imports require --to. Global imports create "
-            "an editable candidate tree; --to is needed only when launching."
+            "Create an agent-neutral, reviewable HANDOFF.md from existing bundles or "
+            "dumps. Global bundles create an editable candidate tree. Use the separate "
+            "`launch AGENT HANDOFF` command after review."
         ),
     )
     sp.add_argument(
@@ -1744,11 +1711,6 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         metavar="SOURCE",
         help="Agentsmith bundle, native JSONL dump, compressed dump, or archive directory",
-    )
-    sp.add_argument(
-        "--to",
-        choices=("copilot", "claude", "codex"),
-        help="destination agent (required for project/session import or --launch)",
     )
     sp.add_argument(
         "--global",
@@ -1772,11 +1734,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--out",
         metavar="PREPARED",
         help="new prepared import directory (default: XDG state directory)",
-    )
-    sp.add_argument(
-        "--launch",
-        action="store_true",
-        help="launch the destination CLI in YOLO mode after preparing",
     )
     sp.set_defaults(func=cmd_import)
 
@@ -1815,9 +1772,9 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[common],
         help="merge a directory's live sessions into one prepared continuation",
         description=(
-            "Export every session pointing at a directory, normalize them in "
-            "chronological order, and prepare one continuation for a destination agent. "
-            "Original sessions are never modified."
+            "Discover every live session pointing at a project directory, export them "
+            "temporarily, and normalize them chronologically into one agent-neutral "
+            "handoff. Original sessions are never modified."
         ),
     )
     _mark(
@@ -1828,12 +1785,6 @@ def build_parser() -> argparse.ArgumentParser:
             help="session working directory (default: current directory)",
         ),
         "dirs",
-    )
-    sp.add_argument(
-        "--to",
-        choices=("copilot", "claude", "codex"),
-        required=True,
-        help="destination agent",
     )
     sp.add_argument(
         "--cwd",
@@ -1873,11 +1824,6 @@ def build_parser() -> argparse.ArgumentParser:
         dest="include_project_context",
         action="store_false",
         help="exclude project-scoped agent instructions/configuration",
-    )
-    sp.add_argument(
-        "--launch",
-        action="store_true",
-        help="launch the destination CLI in YOLO mode after preparing",
     )
     sp.set_defaults(func=cmd_merge)
 

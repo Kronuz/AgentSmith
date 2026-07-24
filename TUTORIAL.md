@@ -204,23 +204,15 @@ Prepare a continuation without launching anything:
 
 ```console
 $ asmith import ~/exports/project \
-    --to codex \
     --cwd ~/code/project \
-    -o ~/imports/project-codex
+    -o ~/imports/project-handoff
 ```
 
 The prepared directory contains `HANDOFF.md`, `manifest.json`, and preserved sources.
 Inspect it, then launch the exact prepared import:
 
 ```console
-$ asmith launch codex ~/imports/project-codex/HANDOFF.md
-```
-
-For a quick path with no pause for manual inspection:
-
-```console
-$ asmith import ~/exports/project \
-    --to codex --cwd ~/code/project --launch
+$ asmith launch codex ~/imports/project-handoff/HANDOFF.md
 ```
 
 The adapter launches a fresh native Codex, Claude, or Copilot session in YOLO mode
@@ -232,15 +224,15 @@ Imports can combine several bundles:
 
 ```console
 $ asmith import ~/exports/phase-one ~/exports/phase-two \
-    --to claude --cwd ~/code/project -o ~/imports/combined
+    --cwd ~/code/project -o ~/imports/combined
 ```
 
 Old native dumps are accepted as a recovery fallback:
 
 ```console
-$ asmith import old-claude.jsonl --to codex --cwd ~/code/project
-$ asmith import old-events.jsonl.gz --from copilot --to claude
-$ asmith import old-session-archive/ --to codex
+$ asmith import old-claude.jsonl --cwd ~/code/project
+$ asmith import old-events.jsonl.gz --from copilot
+$ asmith import old-session-archive/
 ```
 
 Agentsmith auto-detects normal Claude/Codex/Copilot JSONL. `--from` resolves an
@@ -252,11 +244,14 @@ saved.
 To combine all live sessions for a directory into one continuation:
 
 ```console
-$ asmith merge ~/code/project --to codex -o ~/imports/merged
+$ asmith merge ~/code/project -o ~/imports/merged
 $ asmith launch codex ~/imports/merged/HANDOFF.md
 ```
 
-`merge` leaves every original session untouched.
+`import` consumes artifacts you already have: Agentsmith bundles, native dumps, or
+archive directories. `merge` starts from a live project path, discovers every current
+Claude/Codex/Copilot session associated with it, and feeds a temporary export through
+the same normalization pipeline. It leaves every original session untouched.
 
 ### Export global agent configuration
 
@@ -313,8 +308,8 @@ First prepare an editable review directory:
 $ asmith import ~/exports/global-agents -o ~/imports/global-review
 ```
 
-`import` recognizes the global manifest schema, so neither `--global` nor `--to` is
-needed to prepare it. (`--global` is available as an explicit spelling.) The export
+`import` recognizes the global manifest schema, so `--global` is not needed to
+prepare it. (`--global` is available as an explicit spelling.) The export
 itself does not contain `candidate/`; import creates it after verifying the bundle:
 
 ```text
@@ -337,12 +332,6 @@ After your manual review, launch an agent against that exact prepared directory:
 
 ```console
 $ asmith launch codex ~/imports/global-review/HANDOFF.md
-```
-
-Or prepare and launch immediately:
-
-```console
-$ asmith import ~/exports/global-agents --to codex --launch
 ```
 
 The global handoff does not tell the agent to install everything. It requires the
@@ -505,7 +494,7 @@ owns the id automatically — you never qualify it.
 | Read a conversation | `asmith dump <id>` (`-t` tools, `-R` reasoning, `--md`, `--no-subagents`) |
 | Export a session/project | `asmith export <id/PROJECT…> -o BUNDLE` |
 | Export globals | `asmith export --global -o BUNDLE` (or target an agent home) |
-| Prepare an import | `asmith import SOURCE [--to AGENT] -o PREPARED` |
+| Prepare an import | `asmith import SOURCE -o PREPARED` |
 | Launch a handoff | `asmith launch AGENT HANDOFF` |
 | Find which session discussed X | `asmith search <words>` |
 | Grep transcripts | `asmith grep <regex> [id]` |

@@ -137,9 +137,9 @@ def parse_dump(path: Path, harness: str) -> list[Msg]:
     return messages
 
 
-def _default_destination(destination_harness: str) -> Path:
+def _default_destination() -> Path:
     stamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
-    return STATE_DIR / "imports" / f"{stamp}-{destination_harness}"
+    return STATE_DIR / "imports" / f"{stamp}-handoff"
 
 
 def _copy_source(source: Path, destination: Path, index: int) -> str:
@@ -220,13 +220,12 @@ def _render_dump(path: Path, harness: str, messages: list[Msg]) -> str:
 
 def prepare_continuation(
     sources: list[Path],
-    destination_harness: str,
     cwd: Path,
     destination: Path | None = None,
     source_harness: str | None = None,
 ) -> ContinuationResult:
     """Create an atomic, reviewable continuation directory."""
-    root = (destination or _default_destination(destination_harness)).expanduser()
+    root = (destination or _default_destination()).expanduser()
     root = root.resolve()
     if root.exists():
         raise FileExistsError(f"destination already exists: {root}")
@@ -316,10 +315,11 @@ def prepare_continuation(
         handoff = staging / "HANDOFF.md"
         header = (
             "# Agentsmith continuation handoff\n\n"
-            f"- Destination agent: **{destination_harness}**\n"
             f"- Working directory: `{cwd.expanduser().resolve()}`\n"
             f"- Sources: {len(sources)}\n"
             f"- Recovered sessions: {session_count}\n\n"
+            "This handoff is agent-neutral. Launch it with "
+            "`asmith launch AGENT HANDOFF.md`.\n\n"
             "Continue the work represented below. First inspect the current working "
             "tree and reconcile it with this history; do not assume the historical "
             "file state still matches disk. Preserve unfinished objectives, decisions, "
@@ -331,7 +331,6 @@ def prepare_continuation(
             "schema": "agentsmith-continuation",
             "schema_version": 1,
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "destination_harness": destination_harness,
             "cwd": str(cwd.expanduser().resolve()),
             "handoff": "HANDOFF.md",
             "sources": source_records,

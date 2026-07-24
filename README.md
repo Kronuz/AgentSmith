@@ -121,9 +121,9 @@ the full id).
 | `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
 | `asmith export [TARGET…] -o BUNDLE` | Export sessions/projects, defaulting to the current project. An exact agent-home target such as `~/.codex` exports that agent's globals; `--global` exports all globals. |
 | `asmith verify <bundle>` | Verify the export schema, safe relative paths, sizes, and every SHA-256 checksum. |
-| `asmith import SOURCE… [--to AGENT] [-o PREPARED]` | Infer project/global scope from each source. Project imports require `--to`; global imports create an editable `candidate/` and critical-review `HANDOFF.md`. |
+| `asmith import SOURCE… [-o PREPARED]` | Build an agent-neutral handoff from existing bundles/dumps. Global imports create an editable `candidate/` and critical-review `HANDOFF.md`. |
 | `asmith launch AGENT HANDOFF` | Launch an agent with a prepared directory, its printed `HANDOFF.md`, or any standalone handoff file. `--cwd` selects the workspace. |
-| `asmith merge [path] --to AGENT` | Normalize all live sessions for a directory into one prepared continuation without modifying the originals. |
+| `asmith merge [PROJECT] [-o PREPARED]` | Discover and normalize all live sessions for a project into one agent-neutral handoff without modifying the originals. |
 | `asmith search <query…>` | Literal-phrase search across sessions (Copilot FTS5; Claude/Codex scan), merged by recency. |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
 | `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under all harness homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
@@ -214,13 +214,18 @@ Import creates a new directory under
 manifest, and preserved source material:
 
 ```sh
-asmith import ~/exports/project --to codex --cwd ~/code/project
-asmith import old-claude.jsonl old-copilot.jsonl.gz --to claude -o ~/handoff
-asmith import old-session-archive/ --to codex --launch
-asmith merge ~/code/project --to codex --launch
+asmith import ~/exports/project --cwd ~/code/project
+asmith import old-claude.jsonl old-copilot.jsonl.gz -o ~/handoff
+asmith import old-session-archive/
+asmith merge ~/code/project -o ~/merged-handoff
 asmith import ~/exports/global-agent-config
-asmith import ~/exports/global-agent-config --to codex --launch
 ```
+
+`import` consumes artifacts that already exist: export bundles, native dumps, and
+archive directories. `merge` discovers live sessions associated with a project path
+across the configured agent stores, then runs them through the same export/import
+normalization pipeline. Both only prepare agent-neutral handoffs; choose the agent
+later with `asmith launch AGENT HANDOFF`.
 
 Exports are preferred. Native Claude, Codex, and Copilot JSONL dumps are a recovery
 fallback; gzip transcripts and archive directories containing one or more top-level
