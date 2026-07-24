@@ -339,16 +339,6 @@ After your manual review, launch an agent against that exact prepared directory:
 $ asmith launch codex ~/imports/global-review/HANDOFF.md
 ```
 
-For a test drive that cannot change configuration:
-
-```console
-$ asmith launch codex ~/imports/global-review/HANDOFF.md --review-only
-```
-
-This launches Codex with its enforced read-only sandbox rooted at the prepared
-import. It can compare the candidate with live configuration and present the plan,
-but it cannot edit either one.
-
 Or prepare and launch immediately:
 
 ```console

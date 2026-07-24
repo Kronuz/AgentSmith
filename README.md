@@ -220,7 +220,6 @@ asmith import old-session-archive/ --to codex --launch
 asmith merge ~/code/project --to codex --launch
 asmith import ~/exports/global-agent-config
 asmith import ~/exports/global-agent-config --to codex --launch
-asmith launch codex ~/imports/global-review/HANDOFF.md --review-only
 ```
 
 Exports are preferred. Native Claude, Codex, and Copilot JSONL dumps are a recovery
@@ -238,8 +237,7 @@ destination agent to preserve applicable instruction meaning with minimal disclo
 changes, deduplicate overlapping sources, and normalize paths into a self-contained
 native configuration that does not reference another agent home, the export, or the
 prepared import. A launched agent must present a keep/adapt/omit plan and receive
-explicit approval before changing live configuration. For a safe test drive,
-`launch codex HANDOFF --review-only` uses Codex's enforced read-only sandbox.
+explicit approval before changing live configuration.
 
 The destination adapter starts a **new native session** with instructions to read
 the handoff. Agentsmith does not fabricate private JSONL/SQLite records. `merge`

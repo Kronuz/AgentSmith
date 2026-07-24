@@ -356,26 +356,12 @@ def handoff_launch_command(
     harness: str,
     cwd: Path,
     *,
-    review_only: bool = False,
     prompt: str | None = None,
 ) -> list[str]:
     prompt = prompt or (
         f"Read {handoff}, reconcile it with the working directory, and carry out the "
         "handoff. Inspect current state before acting because the handoff may be stale."
     )
-    if review_only and harness != "codex":
-        raise ValueError("review-only launch currently requires Codex")
-    if harness == "codex" and review_only:
-        return [
-            "codex",
-            "--sandbox",
-            "read-only",
-            "--ask-for-approval",
-            "never",
-            "-C",
-            str(cwd),
-            prompt,
-        ]
     if harness == "codex":
         return [
             "codex",
@@ -395,8 +381,6 @@ def launch_command(
     result: ContinuationResult,
     harness: str,
     cwd: Path,
-    *,
-    review_only: bool = False,
 ) -> list[str]:
     prompt = (
         f"Read {result.handoff}, verify its history against the current working tree, "
@@ -406,34 +390,23 @@ def launch_command(
         result.handoff,
         harness,
         cwd,
-        review_only=review_only,
         prompt=prompt,
     )
 
 
-def global_launch_command(
-    result: GlobalImportResult, harness: str, *, review_only: bool = False
-) -> list[str]:
-    mode = (
-        "This is a read-only test drive: do not modify any file or configuration. "
-        if review_only
-        else (
-            "Do not install or modify anything until you have presented the "
-            "keep/adapt/omit plan and I explicitly approve it. "
-        )
-    )
+def global_launch_command(result: GlobalImportResult, harness: str) -> list[str]:
     prompt = (
         f"Read {result.handoff}. Treat {harness} as the sole destination agent and "
         "audit the editable candidate configuration against its live global "
-        f"configuration. {mode}"
+        "configuration. Do not install or modify anything until you have presented "
+        "the keep/adapt/omit plan and I explicitly approve it. "
         "Consolidate applicable instructions into the destination's native layout; "
         "do not leave runtime dependencies on another agent's home directory."
     )
     return handoff_launch_command(
         result.handoff,
         harness,
-        result.root if review_only else Path.home(),
-        review_only=review_only,
+        Path.home(),
         prompt=prompt,
     )
 

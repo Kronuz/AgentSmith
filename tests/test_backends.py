@@ -514,14 +514,6 @@ class BackendFixturesTest(unittest.TestCase):
         )
         self.assertIn("fake-codex", launched.stdout)
         self.assertIn(str(global_staging / "HANDOFF.md"), launched.stdout)
-        review = self.run_cli(
-            "launch",
-            "codex",
-            str(global_staging / "HANDOFF.md"),
-            "--review-only",
-        )
-        self.assertIn("--sandbox read-only", review.stdout)
-        self.assertIn("sole destination agent", review.stdout)
         import_help = self.run_cli("import", "--help")
         self.assertNotIn("--harness", import_help.stdout)
         self.assertIn("SOURCE", import_help.stdout)

@@ -697,8 +697,6 @@ def cmd_import(args: argparse.Namespace) -> None:
         args.bundle = args.sources[0]
         cmd_import_global(args)
         return
-    if args.review_only:
-        die("--review-only is only available for global imports")
     if not args.to:
         die("project/session import requires --to copilot|claude|codex")
     cwd = Path(args.cwd).expanduser().resolve()
@@ -735,11 +733,6 @@ def cmd_import(args: argparse.Namespace) -> None:
 
 
 def cmd_import_global(args: argparse.Namespace) -> None:
-    review_only = getattr(args, "review_only", False)
-    if review_only and not args.launch:
-        die("--review-only requires --launch")
-    if review_only and args.to != "codex":
-        die("--review-only currently requires --to codex")
     try:
         result = prepare_global_import(
             Path(args.bundle), Path(args.out) if args.out else None
@@ -755,12 +748,10 @@ def cmd_import_global(args: argparse.Namespace) -> None:
     if args.launch:
         if not args.to:
             die("--launch requires --to copilot|claude|codex")
-        command = global_launch_command(result, args.to, review_only=review_only)
+        command = global_launch_command(result, args.to)
         print(dim("launching: " + " ".join(command[:2]) + " …"), file=sys.stderr)
         try:
-            completed = subprocess.run(
-                command, cwd=result.root if review_only else Path.home(), check=False
-            )
+            completed = subprocess.run(command, cwd=Path.home(), check=False)
         except FileNotFoundError:
             die(f"destination CLI is not installed or not on PATH: {command[0]}")
         if completed.returncode:
@@ -768,8 +759,6 @@ def cmd_import_global(args: argparse.Namespace) -> None:
 
 
 def cmd_launch(args: argparse.Namespace) -> None:
-    if args.review_only and args.agent != "codex":
-        die("--review-only currently requires AGENT codex")
     supplied = Path(args.handoff).expanduser().resolve()
     root = supplied if supplied.is_dir() else supplied.parent
     handoff = root / "HANDOFF.md" if supplied.is_dir() else supplied
@@ -785,10 +774,8 @@ def cmd_launch(args: argparse.Namespace) -> None:
     schema = manifest.get("schema")
     if schema == "agentsmith-global-import":
         result = GlobalImportResult(root, handoff, int(manifest.get("files", 0)))
-        command = global_launch_command(
-            result, args.agent, review_only=args.review_only
-        )
-        cwd = root if args.review_only else Path.home()
+        command = global_launch_command(result, args.agent)
+        cwd = Path.home()
     elif schema == "agentsmith-continuation":
         cwd_value = manifest.get("cwd")
         cwd = (
@@ -809,7 +796,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
             int(manifest.get("sessions", 0)),
             [],
         )
-        command = launch_command(result2, args.agent, cwd, review_only=args.review_only)
+        command = launch_command(result2, args.agent, cwd)
     else:
         cwd = (
             Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd().resolve()
@@ -817,9 +804,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
         if not cwd.is_dir():
             die(f"working directory does not exist: {cwd}")
         try:
-            command = handoff_launch_command(
-                handoff, args.agent, cwd, review_only=args.review_only
-            )
+            command = handoff_launch_command(handoff, args.agent, cwd)
         except ValueError as exc:
             die(str(exc))
     print(f"handoff: {handoff}")
@@ -1793,11 +1778,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="launch the destination CLI in YOLO mode after preparing",
     )
-    sp.add_argument(
-        "--review-only",
-        action="store_true",
-        help="with --launch and --to codex, enforce a read-only migration audit",
-    )
     sp.set_defaults(func=cmd_import)
 
     sp = sub.add_parser(
@@ -1827,11 +1807,6 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--cwd",
         help="working directory for a standalone handoff or override for a continuation",
-    )
-    sp.add_argument(
-        "--review-only",
-        action="store_true",
-        help="launch in an enforced read-only sandbox (Codex only)",
     )
     sp.set_defaults(func=cmd_launch)
 
