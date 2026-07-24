@@ -341,8 +341,6 @@ rather than a vague, unaudited summary.
 
 `launch` itself remains generic. For a standalone `NEXT_STEPS.md`, it adds no migration
 or ingestion policy; it only tells the selected agent to read and follow that file.
-If an older Agentsmith-prepared handoff lacks the protocol, `launch` warns and asks
-you to regenerate it with `import` or `merge`.
 
 ### Export global agent configuration
 

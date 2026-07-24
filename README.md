@@ -469,8 +469,6 @@ while preserving provenance.
 No handoff can recover information absent from a raw dump or defeat the destination
 model's finite context perfectly. The mandatory coverage protocol provides an
 auditable ingestion procedure rather than a claim of lossless model memory.
-Prepared directories created by older Agentsmith versions should be regenerated;
-`launch` warns when their handoff lacks the protocol rather than injecting it.
 
 `launch` also accepts an arbitrary handoff document; it is not limited to imports:
 
