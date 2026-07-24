@@ -380,6 +380,29 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("staged for review", result.stderr)
         self.assertIn("Staged agent environment", (prepared / "HANDOFF.md").read_text())
 
+    def test_merge_prepares_all_live_sessions_without_modifying_them(self) -> None:
+        destination = self.root / "merged"
+        result = self.run_cli(
+            "merge",
+            str(self.cwd),
+            "--to",
+            "codex",
+            "-o",
+            str(destination),
+        )
+        self.assertIn("merged 3 session(s)", result.stdout)
+        handoff = (destination / "HANDOFF.md").read_text()
+        self.assertIn("copilot fixture", handoff)
+        self.assertIn("codex parent", handoff)
+        self.assertTrue(
+            (
+                Path(self.env["CLAUDE_HOME"])
+                / "projects"
+                / "fixture"
+                / "22222222-2222-2222-2222-222222222222.jsonl"
+            ).is_file()
+        )
+
     def test_search_uses_literal_phrase_across_backends(self) -> None:
         result = self.run_cli("search", "hello", "there", "-n", "10")
         self.assertIn("11111111", result.stdout)

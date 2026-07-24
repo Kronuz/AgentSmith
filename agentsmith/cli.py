@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, override
@@ -471,12 +472,13 @@ def cmd_dump(args: argparse.Namespace) -> None:
         print(text)
 
 
-def cmd_export(args: argparse.Namespace) -> None:
-    backends = select_backends(args.harness)
+def _export_pairs(
+    backends: list[Backend], target: str, recursive: bool
+) -> tuple[list[tuple[Backend, Session]], Path | None]:
     pairs: list[tuple[Backend, Session]] = []
     project_root: Path | None = None
-    if looks_like_path(args.target):
-        root = real(args.target)
+    if looks_like_path(target):
+        root = real(target)
         project_root = Path(root)
         prefix = root.rstrip(os.sep) + os.sep
         for backend in backends:
@@ -484,17 +486,20 @@ def cmd_export(args: argparse.Namespace) -> None:
                 if not session.cwd:
                     continue
                 cwd = real(session.cwd)
-                if cwd == root or (args.recursive and cwd.startswith(prefix)):
+                if cwd == root or (recursive and cwd.startswith(prefix)):
                     pairs.append((backend, session))
         if not pairs:
-            scope = "at or below" if args.recursive else "for"
+            scope = "at or below" if recursive else "for"
             die(f"no sessions {scope} directory: {root}")
     else:
-        pairs.append(resolve(backends, args.target))
+        pairs.append(resolve(backends, target))
         if pairs[0][1].cwd:
             project_root = Path(pairs[0][1].cwd)
     pairs.sort(key=lambda pair: parse_ts(pair[1].updated_at))
+    return pairs, project_root
 
+
+def _export_items(pairs: list[tuple[Backend, Session]]) -> list[ExportItem]:
     render_args = argparse.Namespace(
         assistant_only=False,
         color=False,
@@ -512,6 +517,13 @@ def cmd_export(args: argparse.Namespace) -> None:
         )
         conversation = heading + render_chat(messages, render_args, md=True) + "\n"
         items.append(ExportItem(backend, session, conversation))
+    return items
+
+
+def cmd_export(args: argparse.Namespace) -> None:
+    backends = select_backends(args.harness)
+    pairs, project_root = _export_pairs(backends, args.target, args.recursive)
+    items = _export_items(pairs)
     try:
         export_bundle(
             items,
@@ -530,6 +542,50 @@ def cmd_export(args: argparse.Namespace) -> None:
             f"{Path(args.out).expanduser().resolve()}"
         )
     )
+
+
+def cmd_merge(args: argparse.Namespace) -> None:
+    """Normalize every matching live session into one prepared continuation."""
+    backends = select_backends(args.harness)
+    pairs, project_root = _export_pairs(backends, args.path, args.recursive)
+    cwd = Path(args.cwd or project_root or args.path).expanduser().resolve()
+    if not cwd.is_dir():
+        die(f"working directory does not exist: {cwd}")
+    with tempfile.TemporaryDirectory(prefix="asmith-merge-") as temporary:
+        bundle = Path(temporary) / "bundle"
+        try:
+            export_bundle(
+                _export_items(pairs),
+                bundle,
+                target=args.path,
+                include_memory=args.include_memory,
+                include_environment=args.include_environment,
+                project_root=project_root,
+                recursive=args.recursive,
+            )
+            result = prepare_continuation(
+                [bundle],
+                args.to,
+                cwd,
+                Path(args.out) if args.out else None,
+            )
+        except (FileExistsError, FileNotFoundError, ValueError, OSError) as exc:
+            die(str(exc))
+    print(
+        green(f"merged {result.sessions} session(s) into continuation at {result.root}")
+    )
+    print(f"handoff: {result.handoff}")
+    for warning in result.warnings:
+        print(yellow(f"warning: {warning}"), file=sys.stderr)
+    if args.launch:
+        command = launch_command(result, args.to, cwd)
+        print(dim("launching: " + " ".join(command[:2]) + " …"), file=sys.stderr)
+        try:
+            completed = subprocess.run(command, cwd=cwd, check=False)
+        except FileNotFoundError:
+            die(f"destination CLI is not installed or not on PATH: {command[0]}")
+        if completed.returncode:
+            raise SystemExit(completed.returncode)
 
 
 def cmd_verify(args: argparse.Namespace) -> None:
@@ -1496,6 +1552,62 @@ def build_parser() -> argparse.ArgumentParser:
         help="launch the destination CLI in YOLO mode after preparing",
     )
     sp.set_defaults(func=cmd_import)
+
+    sp = sub.add_parser(
+        "merge",
+        parents=[common],
+        help="merge a directory's live sessions into one prepared continuation",
+        description=(
+            "Export every session pointing at a directory, normalize them in "
+            "chronological order, and prepare one continuation for a destination agent. "
+            "Original sessions are never modified."
+        ),
+    )
+    _mark(
+        sp.add_argument(
+            "path",
+            nargs="?",
+            default=".",
+            help="session working directory (default: current directory)",
+        ),
+        "dirs",
+    )
+    sp.add_argument(
+        "--to",
+        choices=("copilot", "claude", "codex"),
+        required=True,
+        help="destination agent",
+    )
+    sp.add_argument(
+        "--cwd",
+        help="destination working directory (default: merged path)",
+    )
+    sp.add_argument(
+        "-o",
+        "--out",
+        help="new continuation DIRECTORY (default: XDG state directory)",
+    )
+    sp.add_argument(
+        "--recursive",
+        action="store_true",
+        help="also include sessions in nested working directories",
+    )
+    sp.add_argument(
+        "--include-memory",
+        action="store_true",
+        help="include attributable project-scoped memory",
+    )
+    sp.add_argument(
+        "--include-environment",
+        action="store_true",
+        help="include agent instructions/configuration (may contain secrets)",
+    )
+    sp.add_argument(
+        "--launch",
+        action="store_true",
+        help="launch the destination CLI in YOLO mode after preparing",
+    )
+    sp.set_defaults(func=cmd_merge)
 
     sp = sub.add_parser("search", parents=[common], help="search across sessions")
     sp.add_argument("query", nargs="+", help="query terms")
