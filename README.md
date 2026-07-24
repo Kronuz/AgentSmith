@@ -119,6 +119,7 @@ the full id).
 | `asmith show <session>` | Metadata: cwd, repo/branch, times, turns, files, tokens/AIU, checkpoints, resume line. |
 | `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
 | `asmith export <id/path> -o DIR` | Create a portable, checksummed bundle. A path exports every exact-cwd session; `--recursive` includes nested cwd paths; `--include-memory` adds attributable project memory. |
+| `asmith verify <bundle>` | Verify the export schema, safe relative paths, sizes, and every SHA-256 checksum. |
 | `asmith search <query…>` | Literal-phrase search across sessions (Copilot FTS5; Claude/Codex scan), merged by recency. |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
 | `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under all harness homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
@@ -179,12 +180,19 @@ the newest session, and `--raw` emits or copies that one native transcript. Use
 asmith export 10b72094 -o ~/exports/one-session
 asmith export . -o ~/exports/all-sessions-here
 asmith export ~/code/project --recursive --include-memory -o ~/exports/project
+asmith verify ~/exports/project
 ```
 
 The destination must be new. Each bundle has a versioned `manifest.json` with a
 SHA-256 inventory, normalized `conversation.md`, metadata, usage and touched-file
 records, plus the harness's native session-owned files. Project memory is excluded
 unless explicitly requested because it can be shared by many sessions.
+
+Exports are portable archives for inspection and transfer, not fabricated native
+sessions. Native import and cross-agent merge require harness-specific adapters:
+copying JSONL between agents would not preserve tool-call pairing, compactions,
+indexes, or resumability. A safe cross-agent merge must create a new destination
+session from a normalized handoff while retaining the originals.
 
 ## Shredding sessions (`asmith rm`)
 

@@ -128,7 +128,8 @@ results truncated). Use `--raw` when you want the exact underlying file.
 
 For a portable archive, use `asmith export`. Unlike singular `dump`, a path exports
 every session whose cwd exactly matches it. Add `--recursive` for nested cwd paths
-and `--include-memory` for shared project memory.
+and `--include-memory` for shared project memory. After copying it to another
+machine, run `asmith verify <bundle>` before using it.
 
 ---
 

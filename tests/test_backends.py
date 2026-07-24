@@ -43,14 +43,16 @@ class BackendFixturesTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
+    def run_cli(
+        self, *args: str, check: bool = True
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-m", "agentsmith", *args],
             cwd=ROOT,
             env=self.env,
             text=True,
             capture_output=True,
-            check=True,
+            check=check,
         )
 
     def _copilot(self) -> None:
@@ -251,6 +253,15 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertEqual(len(manifest["sessions"]), 3)
         memories = list((destination / "project-memory").rglob("MEMORY.md"))
         self.assertEqual(len(memories), 1)
+        verified = self.run_cli("verify", str(destination))
+        self.assertIn("verified 3 session(s)", verified.stdout)
+
+        conversation = next(destination.rglob("conversation.md"))
+        with conversation.open("a") as stream:
+            stream.write("corrupt\n")
+        failed = self.run_cli("verify", str(destination), check=False)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("size mismatch", failed.stdout)
 
     def test_search_uses_literal_phrase_across_backends(self) -> None:
         result = self.run_cli("search", "hello", "there", "-n", "10")

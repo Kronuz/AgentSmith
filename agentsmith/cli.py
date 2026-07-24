@@ -20,7 +20,7 @@ from .backends import (
     resolve,
     select_backends,
 )
-from .export import ExportItem, export_bundle
+from .export import ExportItem, export_bundle, verify_bundle
 from .model import CACHE_READ_WEIGHT, Msg, PurgeReport, SearchHit, Session
 from .usage_cache import usage_for
 from .util import (
@@ -520,6 +520,19 @@ def cmd_export(args: argparse.Namespace) -> None:
         green(
             f"exported {len(items)} session(s) to "
             f"{Path(args.out).expanduser().resolve()}"
+        )
+    )
+
+
+def cmd_verify(args: argparse.Namespace) -> None:
+    result = verify_bundle(Path(args.bundle))
+    if result.errors:
+        for error in result.errors:
+            print(red(f"error: {error}"))
+        die(f"bundle verification failed ({len(result.errors)} error(s))")
+    print(
+        green(
+            f"verified {result.sessions} session(s), {result.files} checksummed file(s)"
         )
     )
 
@@ -1383,6 +1396,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="include attributable project-scoped memory (shared across sessions)",
     )
     sp.set_defaults(func=cmd_export)
+
+    sp = sub.add_parser(
+        "verify",
+        parents=[common],
+        help="verify a portable export manifest and every checksum",
+    )
+    sp.add_argument("bundle", help="export DIRECTORY")
+    sp.set_defaults(func=cmd_verify)
 
     sp = sub.add_parser("search", parents=[common], help="search across sessions")
     sp.add_argument("query", nargs="+", help="query terms")

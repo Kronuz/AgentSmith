@@ -24,6 +24,13 @@ class ExportItem:
     conversation_md: str
 
 
+@dataclass
+class VerifyResult:
+    files: int
+    sessions: int
+    errors: list[str]
+
+
 def _copy_artifact(source: Path, destination: Path) -> None:
     if source.is_dir():
         shutil.copytree(source, destination)
@@ -137,3 +144,51 @@ def export_bundle(
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
+
+
+def verify_bundle(root: Path) -> VerifyResult:
+    root = root.expanduser().resolve()
+    errors: list[str] = []
+    try:
+        manifest = json.loads((root / "manifest.json").read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return VerifyResult(0, 0, [f"cannot read manifest: {exc}"])
+    if manifest.get("schema") != "agentsmith-export":
+        errors.append("unsupported or missing manifest schema")
+    if manifest.get("schema_version") != SCHEMA_VERSION:
+        errors.append(f"unsupported schema version: {manifest.get('schema_version')!r}")
+    inventory = manifest.get("inventory")
+    if not isinstance(inventory, list):
+        return VerifyResult(0, 0, [*errors, "manifest inventory is not a list"])
+    checked = 0
+    for entry in inventory:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            errors.append("invalid inventory entry")
+            continue
+        relative = Path(entry["path"])
+        if relative.is_absolute() or ".." in relative.parts:
+            errors.append(f"unsafe inventory path: {relative}")
+            continue
+        path = root / relative
+        try:
+            size = path.stat().st_size
+        except OSError:
+            errors.append(f"missing: {relative}")
+            continue
+        if size != entry.get("bytes"):
+            errors.append(f"size mismatch: {relative}")
+            continue
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(block)
+        if digest.hexdigest() != entry.get("sha256"):
+            errors.append(f"checksum mismatch: {relative}")
+            continue
+        checked += 1
+    sessions = manifest.get("sessions")
+    return VerifyResult(
+        checked,
+        len(sessions) if isinstance(sessions, list) else 0,
+        errors,
+    )
