@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import shutil
@@ -27,7 +28,11 @@ class ContinuationResult:
 
 
 def _json_lines(path: Path) -> Iterator[dict[str, Any]]:
-    with path.open(errors="replace") as stream:
+    with (
+        gzip.open(path, mode="rt", errors="replace")
+        if path.suffix == ".gz"
+        else path.open(errors="replace")
+    ) as stream:
         for line in stream:
             try:
                 value = json.loads(line)
@@ -224,6 +229,37 @@ def prepare_continuation(
                 warnings.extend(bundle_warnings)
                 kind = "agentsmith-export"
                 harness: str | None = None
+            elif source.is_dir():
+                candidates = [
+                    candidate
+                    for name in ("events.jsonl", "events.jsonl.gz")
+                    if (candidate := source / name).is_file()
+                ]
+                if not candidates:
+                    candidates = sorted(source.glob("*.jsonl"))
+                if len(candidates) != 1:
+                    raise ValueError(
+                        f"native archive must contain one recognizable transcript: "
+                        f"{source}"
+                    )
+                transcript = candidates[0]
+                harness = source_harness or detect_dump(transcript)
+                if harness is None:
+                    raise ValueError(
+                        f"cannot detect archive format: {source}; use --from"
+                    )
+                messages = parse_dump(transcript, harness)
+                if not messages:
+                    warnings.append(
+                        f"no conversation messages recovered from {transcript}"
+                    )
+                conversations.append(_render_dump(transcript, harness, messages))
+                session_count += 1
+                kind = "native-archive"
+                warnings.append(
+                    f"{source.name}: companion files were preserved but only "
+                    f"{transcript.name} was normalized into HANDOFF.md"
+                )
             elif source.is_file():
                 harness = source_harness or detect_dump(source)
                 if harness is None:

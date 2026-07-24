@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import sqlite3
@@ -341,6 +342,33 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("prepared 1 recovered session(s)", raw_result.stdout)
         self.assertIn("raw dump may omit", raw_result.stderr)
         self.assertIn("hello there", (raw_prepared / "HANDOFF.md").read_text())
+
+        archive = self.root / "old-copilot-archive"
+        archive.mkdir()
+        events = (
+            Path(self.env["COPILOT_STATE"])
+            / "11111111-1111-1111-1111-111111111111"
+            / "events.jsonl"
+        )
+        with (
+            events.open("rb") as source,
+            gzip.open(archive / "events.jsonl.gz", "wb") as destination,
+        ):
+            destination.write(source.read())
+        (archive / "plan.md").write_text("# preserved companion\n")
+        archive_prepared = self.root / "prepared-archive"
+        archive_result = self.run_cli(
+            "import",
+            str(archive),
+            "--to",
+            "claude",
+            "-o",
+            str(archive_prepared),
+        )
+        self.assertIn("prepared 1 recovered session(s)", archive_result.stdout)
+        copied = archive_prepared / "sources" / "001-old-copilot-archive"
+        self.assertTrue((copied / "plan.md").is_file())
+        self.assertIn("hello there", (archive_prepared / "HANDOFF.md").read_text())
 
     def test_export_and_import_stage_agent_environment(self) -> None:
         (self.cwd / "AGENTS.md").write_text("# project instructions\n")
