@@ -301,7 +301,7 @@ asmith merge ~/code/api ~/code/web 10b72094 \
 - `AGENT`: `copilot`, `claude`, or `codex`.
 - `HANDOFF`: prepared directory, its `HANDOFF.md`, or any standalone document.
 - `--cwd PROJECT`: workspace for standalone files or an override for a prepared
-  continuation.
+  handoff. The directory must already exist; otherwise nothing is launched.
 
 Launch uses the selected CLI's YOLO mode and starts a new native session; it never
 fabricates private session-store records.

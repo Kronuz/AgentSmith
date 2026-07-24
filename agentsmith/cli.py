@@ -771,8 +771,12 @@ def cmd_launch(args: argparse.Namespace) -> None:
     schema = manifest.get("schema")
     if schema == "agentsmith-global-import":
         result = GlobalImportResult(root, handoff, int(manifest.get("files", 0)))
-        command = global_launch_command(result, args.agent)
-        cwd = Path.home()
+        cwd = (
+            Path(args.cwd).expanduser().resolve() if args.cwd else Path.home().resolve()
+        )
+        if not cwd.is_dir():
+            die(f"working directory does not exist: {cwd}")
+        command = global_launch_command(result, args.agent, cwd)
     elif schema == "agentsmith-continuation":
         cwd_value = manifest.get("cwd")
         cwd = (

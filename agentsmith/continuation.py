@@ -395,8 +395,10 @@ def launch_command(
     return handoff_launch_command(result.handoff, harness, cwd)
 
 
-def global_launch_command(result: GlobalImportResult, harness: str) -> list[str]:
-    return handoff_launch_command(result.handoff, harness, Path.home())
+def global_launch_command(
+    result: GlobalImportResult, harness: str, cwd: Path
+) -> list[str]:
+    return handoff_launch_command(result.handoff, harness, cwd)
 
 
 def prepare_global_import(

@@ -313,7 +313,8 @@ $ asmith launch copilot ./NEXT_STEPS.md --cwd ~/code/project
 ```
 
 Prepared continuations carry their workspace in `manifest.json`; `--cwd` overrides
-it. A standalone file uses the current directory unless `--cwd` is supplied.
+it. A standalone file uses the current directory unless `--cwd` is supplied. The
+selected directory must already exist or Agentsmith refuses to launch.
 
 ### Exhaustive ingestion in generated handoffs
 

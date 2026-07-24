@@ -505,9 +505,12 @@ class BackendFixturesTest(unittest.TestCase):
             "launch",
             "codex",
             str(global_staging / "HANDOFF.md"),
+            "--cwd",
+            str(self.cwd),
         )
         self.assertIn("fake-codex", launched.stdout)
         self.assertIn(str(global_staging / "HANDOFF.md"), launched.stdout)
+        self.assertIn(f"-C {self.cwd.resolve()}", launched.stdout)
         self.assertIn("Read and follow the handoff", launched.stdout)
         self.assertNotIn("perform exhaustive ingestion", launched.stdout)
         import_help = self.run_cli("import", "--help")
@@ -564,6 +567,16 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn(str(standalone), generic.stdout)
         self.assertIn("Read and follow the handoff", generic.stdout)
         self.assertNotIn("perform exhaustive ingestion", generic.stdout)
+        missing_cwd = self.run_cli(
+            "launch",
+            "codex",
+            str(standalone),
+            "--cwd",
+            str(self.root / "missing-workspace"),
+            check=False,
+        )
+        self.assertNotEqual(missing_cwd.returncode, 0)
+        self.assertIn("working directory does not exist", missing_cwd.stderr)
 
         claude_global = self.root / "claude-global"
         self.run_cli(
