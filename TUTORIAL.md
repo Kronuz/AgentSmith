@@ -389,15 +389,14 @@ global-agents/
 │   ├── claude/
 │   ├── copilot/
 │   └── codex/
-├── shared/
-│   └── instructions/
 └── manifest.json
 ```
 
-Agent-specific configuration stays under its agent. Logically shared instructions
-are stored once under `shared/instructions/` with destination mappings. When an
-agent needs a different shape—for example Codex's single global `AGENTS.md`—the
-bundle can carry a destination adapter.
+Agent-specific configuration stays under its source agent. The import review
+reconciles overlap only after the destination agent is selected; export does not
+preemptively concatenate instructions into a destination adapter. Legacy bundles
+that already contain such an adapter remain importable, but it is review evidence,
+not a ready-to-install file.
 
 Authentication/session stores are excluded. Settings may still contain inline
 secrets, so review the export before sharing it.
@@ -417,10 +416,9 @@ not contain `candidate/`; import creates it after verifying the bundle:
 global-review/
 ├── HANDOFF.md
 ├── candidate/       # visible files you may edit or delete
-│   ├── shared/
 │   ├── claude/
 │   ├── copilot/
-│   └── adapters/
+│   └── codex/
 ├── source/          # untouched verified export
 └── manifest.json
 ```

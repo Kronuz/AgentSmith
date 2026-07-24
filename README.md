@@ -465,17 +465,17 @@ bundle.
 
 Project and global scope never mix. In a multi-project export, each context is
 namespaced by its recorded project root and global files appear zero times. Use
-Use `export --global` once to move user-wide Claude/Codex/Copilot instructions, settings,
+`export --global` once to move user-wide Claude/Codex/Copilot instructions, settings,
 hooks, commands, rules, and skills. Authentication and session stores are always
 excluded; settings can still contain inline secrets, so inspect before sharing.
 Global bundles use visible `global/claude`, `global/copilot`, and `global/codex`
 directories; the manifest separately records their hidden-home destinations.
-Logically shared instructions may live once under `shared/instructions` with
-multiple destination mappings. Destination adapters can consolidate them when an
-agent uses a single instruction file. Such adapters are derived migration aids, not
-authoritative install artifacts: import must split their material across the
-destination's native instruction, project, skill, hook, and configuration surfaces
-and respect that agent's instruction-ingestion budget.
+AgentSmith preserves each native source rather than synthesizing a destination
+instruction file. Import reconciles overlapping sources into the chosen agent's
+native instruction, project, skill, hook, and configuration surfaces. Legacy or
+third-party bundles may contain derived adapters; treat them as migration evidence,
+not authoritative install artifacts, and respect the destination's instruction
+ingestion budget.
 
 ## Importing and merging
 
