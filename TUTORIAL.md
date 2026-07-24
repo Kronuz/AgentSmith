@@ -12,7 +12,7 @@ If you haven't yet, add this to your shell rc and open a new shell:
 ```
 
 The installer makes `asmith` available to scripts and non-interactive agent shells;
-the sourced file adds `resume`/`cd`, the `copilot()` / `claude()` / `codex()`
+the sourced file adds `ascd`, the `copilot()` / `claude()` / `codex()`
 auto-resume wrappers, and tab completion. Rows are tagged `co`, `cl`, or `cx`.
 
 Choose the workflow that matches what you have:
@@ -594,7 +594,7 @@ owns the id automatically — you never qualify it.
 - **Pipe it.** Color auto-disables when output isn't a terminal, so
   `asmith dump . | less`, `asmith ls | grep KronuzBlog`, and `asmith resolve . | pbcopy`
   all Just Work. Force plain text anytime with `NO_COLOR=1`.
-- **Jump into a session's files.** `asmith cd <id>` drops you into its on-disk state
+- **Jump into a session's files.** `ascd <id>` drops you into its on-disk state
   dir; `asmith path <id>` just prints it.
 - **Scripting.** `asmith resolve --resumable --exact .` is the exact resolver the
   `copilot()` wrapper uses — handy in your own scripts.

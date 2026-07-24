@@ -4,78 +4,13 @@
 # Source me from your ~/.profile / ~/.zshrc / ~/.bashrc:
 #     source ~/code/AgentSmith/agentsmith.sh
 #
-# Provides `asmith` plus copilot()/claude()/codex() auto-resume wrappers.
-# Compatible with bash & zsh. All reporting lives in the `agentsmith` package next
-# to this file; the shell wrappers exist because they must exec the CLI in your
-# interactive shell.
+# Provides `ascd`, copilot()/claude()/codex() auto-resume wrappers, and completion.
+# It deliberately does not define `asmith`; that name always means the executable.
 
-# --- locate this file (bash + zsh) ---------------------------------------
-if [ -n "${BASH_SOURCE:-}" ]; then
-  _ASMITH_SELF="${BASH_SOURCE[0]}"
-elif [ -n "${ZSH_VERSION:-}" ]; then
-  _ASMITH_SELF="${(%):-%x}"
-else
-  _ASMITH_SELF="$0"
-fi
-_ASMITH_DIR="$(cd "$(dirname "$_ASMITH_SELF")" >/dev/null 2>&1 && pwd)"
-: "${ASMITH_PYTHON:=python3}"
-unset _ASMITH_SELF
-
-# Run the agentsmith package (kept importable via PYTHONPATH = its parent dir).
-_asmith_py() { PYTHONPATH="$_ASMITH_DIR${PYTHONPATH:+:$PYTHONPATH}" "$ASMITH_PYTHON" -m agentsmith "$@"; }
-
-asmith() {
-  local cmd="${1:-help}"
-  case "$cmd" in
-    resume)
-      shift
-      local h="${1:-}"
-      case "$h" in
-        copilot|claude|codex) shift ;;
-        *)
-          printf 'usage: asmith resume <copilot|claude|codex> [DIR]\n' >&2
-          return 2
-          ;;
-      esac
-      if [ "$#" -gt 1 ]; then
-        printf 'usage: asmith resume <copilot|claude|codex> [DIR]\n' >&2
-        return 2
-      fi
-      local dir="${1:-.}"
-      if [ ! -d "$dir" ]; then
-        printf 'asmith: directory does not exist: %s\n' "$dir" >&2
-        return 1
-      fi
-      local id
-      id="$(_asmith_py resolve -H "$h" --resumable --exact "$dir")" || return 1
-      [ -z "$id" ] && return 1
-      printf 'asmith: resuming %s session %s\n' "$h" "${id%%-*}" >&2
-      case "$h" in
-        copilot) command copilot --resume="$id" --yolo ;;
-        claude)  command claude --resume "$id" ;;
-        codex)   command codex resume "$id" --dangerously-bypass-approvals-and-sandbox ;;
-        *) printf 'asmith: unknown harness %s\n' "$h" >&2; return 1 ;;
-      esac
-      ;;
-    cd)
-      # cd into the on-disk state dir of a session (default: newest for cwd)
-      shift
-      local dir
-      dir="$(_asmith_py path "${1:-.}")" && cd "$dir" || return 1
-      ;;
-    help|-h|--help|"")
-      _asmith_py --help
-      cat <<'EOF'
-
-Shell-only extras (from agentsmith.sh):
-  asmith resume <copilot|claude|codex> [DIR]  resume newest session for DIR (default: cwd)
-  asmith cd [SESSION]                         cd into a session's on-disk state dir
-EOF
-      ;;
-    *)
-      _asmith_py "$@"
-      ;;
-  esac
+# Change the calling shell into a session's native state directory.
+ascd() {
+  local dir
+  dir="$(asmith path "${1:-.}")" && builtin cd -- "$dir" || return 1
 }
 
 # Agent wrappers — a bare command resumes the newest resumable session for the
@@ -85,7 +20,7 @@ EOF
 copilot() {
   if [ $# -eq 0 ]; then
     local id
-    id="$(_asmith_py resolve --resumable --exact -H copilot . 2>/dev/null)"
+    id="$(asmith resolve --resumable --exact -H copilot . 2>/dev/null)"
     command copilot ${id:+--resume="$id"} --yolo
   else
     command copilot "$@"
@@ -95,7 +30,7 @@ copilot() {
 claude() {
   if [ $# -eq 0 ]; then
     local id
-    id="$(_asmith_py resolve --resumable --exact -H claude . 2>/dev/null)"
+    id="$(asmith resolve --resumable --exact -H claude . 2>/dev/null)"
     command claude ${id:+--resume "$id"}
   else
     command claude "$@"
@@ -105,7 +40,7 @@ claude() {
 codex() {
   if [ $# -eq 0 ]; then
     local id
-    id="$(_asmith_py resolve --resumable --exact -H codex . 2>/dev/null)"
+    id="$(asmith resolve --resumable --exact -H codex . 2>/dev/null)"
     if [ -n "$id" ]; then
       command codex resume "$id" --dangerously-bypass-approvals-and-sandbox
     else

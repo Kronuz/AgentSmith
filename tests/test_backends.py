@@ -64,18 +64,20 @@ class BackendFixturesTest(unittest.TestCase):
         fake_codex.write_text("#!/bin/sh\nprintf 'codex %s\\n' \"$*\"\n")
         fake_codex.chmod(0o755)
         env = dict(self.env)
-        env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
+        env["PATH"] = (
+            str(fake_bin)
+            + os.pathsep
+            + str(ROOT / "bin")
+            + os.pathsep
+            + env.get("PATH", "")
+        )
         env["ASMITH_SCRIPT"] = str(ROOT / "agentsmith.sh")
         env["TEST_RESUME_DIR"] = str(self.cwd)
         resumed = subprocess.run(
             [
                 "bash",
                 "-c",
-                (
-                    'source "$ASMITH_SCRIPT"; '
-                    "_asmith_py() { printf '77777777-7777-7777-7777-777777777777\\n'; }; "
-                    'asmith resume codex "$TEST_RESUME_DIR"'
-                ),
+                ('source "$ASMITH_SCRIPT"; asmith resume codex "$TEST_RESUME_DIR"'),
             ],
             env=env,
             text=True,
@@ -83,7 +85,7 @@ class BackendFixturesTest(unittest.TestCase):
             check=True,
         )
         self.assertIn(
-            "codex resume 77777777-7777-7777-7777-777777777777", resumed.stdout
+            "codex resume 33333333-3333-3333-3333-333333333333", resumed.stdout
         )
         missing_agent = subprocess.run(
             ["bash", "-c", 'source "$ASMITH_SCRIPT"; asmith resume'],
@@ -94,9 +96,18 @@ class BackendFixturesTest(unittest.TestCase):
         )
         self.assertEqual(missing_agent.returncode, 2)
         self.assertIn(
-            "asmith resume <copilot|claude|codex> [DIR]",
+            "the following arguments are required: AGENT",
             missing_agent.stderr,
         )
+        resolved = subprocess.run(
+            ["bash", "-c", 'source "$ASMITH_SCRIPT"; type asmith'],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        self.assertNotIn("shell function", resolved.stdout)
+        self.assertIn(str(ROOT / "bin" / "asmith"), resolved.stdout)
 
     def run_cli(
         self, *args: str, check: bool = True

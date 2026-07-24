@@ -27,7 +27,7 @@ Two parts:
     and `__init__.py` (selection + cross-harness resolution). Run it directly with
     `python -m agentsmith ...`.
 - **`bin/asmith`** — a real executable for scripts and non-interactive agent shells.
-- **`agentsmith.sh`** — a sourceable bash/zsh wrapper: shell-only `resume`/`cd`, the
+- **`agentsmith.sh`** — sourceable bash/zsh integrations: shell-only `ascd`, the
   `copilot()` / `claude()` / `codex()` auto-resume wrappers, and completions.
 
 ## Install
@@ -41,8 +41,9 @@ the shell integrations from `~/.profile` (or `~/.zshrc` / `~/.bashrc`):
 ```
 
 The executable matters for non-interactive shells: agent tool calls do not source
-your profile or inherit shell functions. The sourced file defines the interactive
-`asmith` wrapper, all three agent wrappers, and **tab completion** (bash + zsh).
+your profile or inherit shell functions. The sourced file deliberately does not
+redefine `asmith`; it adds `ascd`, all three agent wrappers, and **tab completion**
+(bash + zsh).
 Requires `python3` (stdlib only) and each agent CLI you use on `PATH`. Override with
 `ASMITH_PYTHON=/path/to/python3`.
 
@@ -142,7 +143,7 @@ the full id).
 | `asmith rm <id/path…>` | **Shred local state** for session(s). Path targets are exact unless `--recursive` is explicit. `-y`, `--dry-run`, `-v`, `--aggressive`. |
 | `asmith purge` | Shred all **empty** sessions (no transcript, 0 turns). `-y`, `--dry-run`, `-v`, `-H`. |
 | `asmith resume AGENT [DIR]` | Resume the selected agent's newest resumable session for `DIR` (default: current directory). |
-| `asmith cd [session]` | `cd` into a session's on-disk location (shell). |
+| `ascd [session]` | Change the current shell into a session's on-disk location. |
 | `asmith completion <bash\|zsh>` | Print the tab-completion script for your shell. |
 
 ## Complete option reference
@@ -397,12 +398,14 @@ path becomes necessary, the agent must stop and obtain approval for a new snapsh
 ### Shell and scripting
 
 `asmith completion bash|zsh` prints the completion program to source from the shell.
-The sourced `agentsmith.sh` also provides `asmith resume` and `asmith cd`, which must
-run in the calling shell to launch interactively or change its directory:
+`asmith resume` is part of the real executable and launches the selected agent
+interactively. The sourced `agentsmith.sh` adds `ascd`, which must be a function
+because only the calling shell can change its own directory:
 
 ```sh
 asmith resume codex                 # newest Codex session for cwd
 asmith resume claude ~/code/project # newest Claude session for DIR
+ascd 10b72094                       # enter that session's native state directory
 ```
 
 ## The agent wrappers

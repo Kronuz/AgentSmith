@@ -309,6 +309,27 @@ def cmd_resolve(args: argparse.Namespace) -> None:
     print(s.id)
 
 
+def cmd_resume(args: argparse.Namespace) -> None:
+    cwd = Path(args.dir).expanduser().resolve()
+    if not cwd.is_dir():
+        die(f"directory does not exist: {cwd}")
+    backend, session = resolve(
+        select_backends(args.agent),
+        str(cwd),
+        resumable=True,
+        exact=True,
+    )
+    command = backend.resume_command(session.id)
+    print(
+        f"asmith: resuming {args.agent} session {short(session.id)}",
+        file=sys.stderr,
+    )
+    try:
+        os.execvp(command[0], command)
+    except FileNotFoundError:
+        die(f"agent CLI is not installed or not on PATH: {command[0]}")
+
+
 def cmd_show(args: argparse.Namespace) -> None:
     backends = select_backends(args.harness)
     b, s = resolve(backends, args.session)
@@ -1105,9 +1126,6 @@ def cmd_usage(args: argparse.Namespace) -> None:
     )
 
 
-# Shell-only subcommands (handled by the asmith() wrapper, absent from this parser) and
-# the kind of positional each completes: "ids", "dirs", or "both".
-_SHELL_COMMANDS = {"resume": "both", "cd": "ids"}
 _DIRS_SENTINEL = "__DIRS__"  # the shell expands this line to directory names
 
 
@@ -1146,9 +1164,7 @@ def cmd_complete(args: argparse.Namespace) -> None:
         choices: dict[str, argparse.ArgumentParser] = (
             dict(getattr(spa, "choices", {})) if spa else {}
         )
-        commands = sorted(
-            [c for c in choices if not c.startswith("_")] + list(_SHELL_COMMANDS)
-        )
+        commands = sorted(c for c in choices if not c.startswith("_"))
         if len(words) <= 1:  # completing the subcommand itself
             print("\n".join(commands))
             return
@@ -1180,7 +1196,7 @@ def cmd_complete(args: argparse.Namespace) -> None:
             }
             kind = next((k for k in ("both", "ids", "dirs") if k in kinds), None)
         else:
-            kind = _SHELL_COMMANDS.get(cmd)
+            kind = None
         _emit_positional(kind)
     except Exception:  # noqa: BLE001 - completion must never raise
         return
@@ -1599,6 +1615,7 @@ def _order_subcommand_help(parser: argparse.ArgumentParser) -> None:
         "dirs",
         "find",
         "resolve",
+        "resume",
         "show",
         "dump",
         "search",
@@ -1774,6 +1791,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--exact", action="store_true", help="exact cwd match (path args)")
     sp.set_defaults(func=cmd_resolve)
+
+    sp = sub.add_parser(
+        "resume",
+        parents=[output],
+        help="resume an agent's newest session for a directory",
+    )
+    sp.add_argument(
+        "agent",
+        choices=("copilot", "claude", "codex"),
+        metavar="AGENT",
+        help="agent to resume",
+    )
+    _mark(
+        sp.add_argument(
+            "dir",
+            nargs="?",
+            default=".",
+            metavar="DIR",
+            help="exact session working directory (default: current directory)",
+        ),
+        "dirs",
+    )
+    sp.set_defaults(func=cmd_resume)
 
     sp = sub.add_parser("show", parents=[common], help="show session metadata")
     _mark(
