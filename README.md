@@ -201,6 +201,8 @@ namespaced by its recorded project root and global files appear zero times. Use
 `export-global` once to move user-wide Claude/Codex/Copilot instructions, settings,
 hooks, commands, rules, and skills. Authentication and session stores are always
 excluded; settings can still contain inline secrets, so inspect before sharing.
+Global bundles use visible `global/claude`, `global/copilot`, and `global/codex`
+directories; the manifest separately records their hidden-home destinations.
 
 ## Importing and merging
 

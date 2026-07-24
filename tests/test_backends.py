@@ -424,7 +424,7 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("global agent configuration", global_export.stdout)
         global_manifest = json.loads((global_bundle / "manifest.json").read_text())
         global_paths = {entry["path"] for entry in global_manifest["environment"]}
-        self.assertIn("environment/global/codex/.codex/config.toml", global_paths)
+        self.assertIn("global/codex/config.toml", global_paths)
         self.assertFalse(any("auth.json" in path for path in global_paths))
         self.assertFalse(any("AGENTS.md" in path for path in global_paths))
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 
@@ -15,6 +15,7 @@ class EnvironmentFile:
     scope: str
     harness: str
     project_root: str | None = None
+    destination: str | None = None
 
 
 _PROJECT_PATHS: dict[str, tuple[str, ...]] = {
@@ -189,10 +190,27 @@ def collect_global_environment(
             for harness, paths in _USER_PATHS.items()
             if harness == "shared" or harness in harnesses
         }
-    return _collect(
+    collected = _collect(
         "global",
         home,
         mapping,
         Path("environment") / "global",
         None,
     )
+    visible: list[EnvironmentFile] = []
+    for item in collected:
+        parts = item.bundle_path.parts
+        if item.harness == "shared":
+            relative = Path(*parts[3:])
+            agent_home = Path()
+        else:
+            relative = Path(*parts[4:])
+            agent_home = Path(parts[3])
+        visible.append(
+            replace(
+                item,
+                bundle_path=Path("global") / item.harness / relative,
+                destination=str(agent_home / relative),
+            )
+        )
+    return visible

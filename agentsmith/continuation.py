@@ -393,8 +393,12 @@ def prepare_global_import(
             if not isinstance(entry, dict):
                 continue
             bundle_path = str(entry.get("path", "?"))
-            parts = Path(bundle_path).parts
-            relative = Path(*parts[3:]) if len(parts) > 3 else Path("?")
+            explicit_destination = entry.get("destination")
+            if isinstance(explicit_destination, str):
+                relative = Path(explicit_destination)
+            else:
+                parts = Path(bundle_path).parts
+                relative = Path(*parts[3:]) if len(parts) > 3 else Path("?")
             lines.append(
                 f"- `{bundle_path}` → `~/{relative}` ({entry.get('harness', '?')})"
             )

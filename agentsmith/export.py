@@ -186,11 +186,19 @@ def export_global_bundle(destination: Path, harnesses: set[str] | None = None) -
                     "scope": item.scope,
                     "harness": item.harness,
                     "project_root": item.project_root,
+                    "destination": item.destination,
                     "source": str(item.source),
                     "path": str(item.bundle_path),
                 }
             )
 
+        (staging / "README.md").write_text(
+            "# Global agent configuration\n\n"
+            "Each visible agent directory maps to its hidden home directory:\n\n"
+            "- `global/claude/` → `~/.claude/`\n"
+            "- `global/copilot/` → `~/.copilot/`\n"
+            "- `global/codex/` → `~/.codex/`\n"
+        )
         manifest = {
             "schema": "agentsmith-global-export",
             "schema_version": SCHEMA_VERSION,

@@ -393,15 +393,14 @@ def _global_bundle(backup: Path, destination: Path) -> dict[str, int]:
         relative = source.relative_to(claude)
         if source.name in _SKIP_NAMES or relative.parts[0] == "memories":
             continue
-        target = (
-            destination / "environment" / "global" / "claude" / ".claude" / relative
-        )
+        target = destination / "claude" / relative
         _copy(source, target)
         entries.append(
             {
                 "scope": "global",
                 "harness": "claude",
                 "project_root": None,
+                "destination": str(Path(".claude") / relative),
                 "source": str(source),
                 "path": str(target.relative_to(destination)),
             }
@@ -420,20 +419,27 @@ def _global_bundle(backup: Path, destination: Path) -> dict[str, int]:
                 counts["copilot_conflicts"] += 1
             selected[relative] = source
     for relative, source in sorted(selected.items()):
-        target = (
-            destination / "environment" / "global" / "copilot" / ".copilot" / relative
-        )
+        target = destination / "copilot" / relative
         _copy(source, target)
         entries.append(
             {
                 "scope": "global",
                 "harness": "copilot",
                 "project_root": None,
+                "destination": str(Path(".copilot") / relative),
                 "source": str(source),
                 "path": str(target.relative_to(destination)),
             }
         )
         counts["copilot"] += 1
+    (destination / "README.md").write_text(
+        "# Global agent configuration\n\n"
+        "Visible, portable copies of user-wide Claude and Copilot configuration.\n\n"
+        "- `claude/` maps to `~/.claude/`\n"
+        "- `copilot/` maps to `~/.copilot/`\n\n"
+        "Run `asmith import-global .` to create a conflict-safe review map. Files "
+        "are never silently installed over existing configuration.\n"
+    )
     manifest = {
         "schema": "agentsmith-global-export",
         "schema_version": 1,
