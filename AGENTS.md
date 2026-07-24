@@ -38,12 +38,14 @@ because it needed a working agent (`copilot -p`) that isn't reliably available.
 | `agentsmith/backends/claude.py` | `ClaudeBackend` + claude store paths. |
 | `agentsmith/backends/codex.py` | `CodexBackend` + Codex store paths. |
 | `agentsmith/backends/__init__.py` | `select_backends`, `resolve`, `all_sessions`, `backend_for`. |
+| `bin/asmith` / `install.sh` | Real non-interactive executable / conservative `~/.local/bin` symlink installer. |
 | `agentsmith.sh` | Sourceable bash/zsh wrapper: `asmith`, agent auto-resume wrappers, completions. |
 | `README.md` / `AGENTS.md` / `TUTORIAL.md` | User docs / agent-facing docs / hands-on walkthrough. |
 | `pyrefly.toml` | Strict type-check config (`project-includes = ["agentsmith"]`). |
 
-The shell wrapper runs the package via `python -m agentsmith`, keeping it
-importable by putting its parent dir on `PYTHONPATH`.
+The real executable and shell wrapper run the package via `python -m agentsmith`,
+keeping it importable by putting its parent dir on `PYTHONPATH`. Generated safety
+protocols use an executable path, never a shell function that depends on startup files.
 
 ## Architecture
 

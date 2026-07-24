@@ -7,11 +7,13 @@ for brevity.
 If you haven't yet, add this to your shell rc and open a new shell:
 
 ```sh
+~/code/AgentSmith/install.sh
 [ -r "$HOME/code/AgentSmith/agentsmith.sh" ] && . "$HOME/code/AgentSmith/agentsmith.sh"
 ```
 
-That gives you `asmith`, the `copilot()` / `claude()` / `codex()` auto-resume
-wrappers, and tab completion. Rows are tagged `co`, `cl`, or `cx`.
+The installer makes `asmith` available to scripts and non-interactive agent shells;
+the sourced file adds `resume`/`cd`, the `copilot()` / `claude()` / `codex()`
+auto-resume wrappers, and tab completion. Rows are tagged `co`, `cl`, or `cx`.
 
 Choose the workflow that matches what you have:
 

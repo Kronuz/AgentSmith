@@ -1,0 +1,15 @@
+#!/bin/sh
+# Real AgentSmith CLI entry point for scripts and non-interactive agent shells.
+set -eu
+
+launcher=$0
+while [ -L "$launcher" ]; do
+    target=$(readlink "$launcher")
+    case "$target" in
+        /*) launcher=$target ;;
+        *) launcher=$(dirname "$launcher")/$target ;;
+    esac
+done
+root=$(CDPATH= cd -- "$(dirname "$launcher")/.." && pwd)
+python=${ASMITH_PYTHON:-python3}
+PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}" exec "$python" -m agentsmith "$@"

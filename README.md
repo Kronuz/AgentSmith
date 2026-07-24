@@ -26,20 +26,24 @@ Two parts:
     and `backends/` with `base.py` (the `Backend` ABC), one module per harness,
     and `__init__.py` (selection + cross-harness resolution). Run it directly with
     `python -m agentsmith ...`.
-- **`agentsmith.sh`** — a sourceable bash/zsh wrapper: the `asmith` command, the
+- **`bin/asmith`** — a real executable for scripts and non-interactive agent shells.
+- **`agentsmith.sh`** — a sourceable bash/zsh wrapper: shell-only `resume`/`cd`, the
   `copilot()` / `claude()` / `codex()` auto-resume wrappers, and completions.
 
 ## Install
 
-Source the shell file from your `~/.profile` (or `~/.zshrc` / `~/.bashrc`):
+Install the executable into `~/.local/bin` (which should be on `PATH`), then source
+the shell integrations from `~/.profile` (or `~/.zshrc` / `~/.bashrc`):
 
 ```sh
+~/code/AgentSmith/install.sh
 [ -r "$HOME/code/AgentSmith/agentsmith.sh" ] && . "$HOME/code/AgentSmith/agentsmith.sh"
 ```
 
-That single line defines `asmith`, all three agent wrappers, aliases, and **tab
-completion** (bash + zsh). Requires `python3` (stdlib only) and each agent CLI you
-use on `PATH`. Override the interpreter with
+The executable matters for non-interactive shells: agent tool calls do not source
+your profile or inherit shell functions. The sourced file defines the interactive
+`asmith` wrapper, all three agent wrappers, and **tab completion** (bash + zsh).
+Requires `python3` (stdlib only) and each agent CLI you use on `PATH`. Override with
 `ASMITH_PYTHON=/path/to/python3`.
 
 Tab completion is registered automatically when you source the file. The

@@ -33,6 +33,7 @@ class BackendFixturesTest(unittest.TestCase):
             "ASMITH_CACHE": str(self.root / "cache"),
             "ASMITH_ENV_HOME": str(self.root / "portable-home"),
             "ASMITH_STATE": str(self.root / "state"),
+            "ASMITH_COMMAND": str(ROOT / "bin" / "asmith"),
             "COPILOT_HOME": str(self.root / "copilot"),
             "COPILOT_DB": str(self.root / "copilot" / "session-store.db"),
             "COPILOT_STATE": str(self.root / "copilot" / "session-state"),
@@ -610,9 +611,10 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn(
             "Consolidate overlapping instruction sources", import_instructions
         )
-        self.assertIn("asmith snapshot PATH... -o RECEIPT", import_instructions)
-        self.assertIn("asmith audit RECEIPT --seal", import_instructions)
-        self.assertIn("asmith rollback RECEIPT --dry-run", import_instructions)
+        self.assertIn("snapshot PATH... -o RECEIPT", import_instructions)
+        self.assertIn("audit RECEIPT --seal", import_instructions)
+        self.assertIn("rollback RECEIPT --dry-run", import_instructions)
+        self.assertIn(str(ROOT / "bin" / "asmith"), import_instructions)
         self.assertTrue((global_staging / "candidate").is_dir())
         self.assertTrue((global_staging / "source").is_dir())
         fake_bin = self.root / "bin"

@@ -5,6 +5,8 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import os
+import shlex
 import shutil
 import tempfile
 from collections.abc import Iterator
@@ -16,6 +18,17 @@ from typing import Any
 from .config import STATE_DIR
 from .export import verify_bundle
 from .model import Msg
+
+
+def _asmith_command() -> str:
+    """Return a stable executable command for generated safety protocols."""
+    configured = os.environ.get("ASMITH_COMMAND")
+    if configured:
+        return configured
+    executable = shutil.which("asmith")
+    if executable:
+        return executable
+    return str(Path(__file__).resolve().parent.parent / "bin" / "asmith")
 
 
 @dataclass
@@ -434,6 +447,7 @@ def prepare_global_import(
     candidate_records: list[dict[str, object]] = []
     try:
         shutil.copytree(source, staging / "source")
+        asmith = shlex.quote(_asmith_command())
         lines = [
             "# Global agent configuration handoff",
             "",
@@ -509,7 +523,7 @@ def prepare_global_import(
             (
                 "11. The approval plan must enumerate every exact live path that may be "
                 "created, modified, moved, or deleted. After approval but before the "
-                "first live write, run `asmith snapshot PATH... -o RECEIPT`. Put the "
+                f"first live write, run `{asmith} snapshot PATH... -o RECEIPT`. Put the "
                 "receipt in durable user state outside the destination agent home, the "
                 "export, and this prepared import (normally under "
                 "`$XDG_STATE_HOME/agentsmith/receipts/` or "
@@ -518,11 +532,12 @@ def prepare_global_import(
                 "new snapshot before touching the additional path."
             ),
             (
-                "12. After all approved writes, run `asmith audit RECEIPT --seal`. "
+                f"12. After all approved writes, run `{asmith} audit RECEIPT --seal`. "
                 "Report the durable receipt path and its complete "
                 "created/modified/deleted/unchanged ledger. Also show the user "
-                "`asmith audit RECEIPT`, `asmith rollback RECEIPT --dry-run`, and "
-                "`asmith rollback RECEIPT -y`. Do not call the migration complete "
+                f"`{asmith} audit RECEIPT`, "
+                f"`{asmith} rollback RECEIPT --dry-run`, and "
+                f"`{asmith} rollback RECEIPT -y`. Do not call the migration complete "
                 "unless the receipt seals successfully."
             ),
             "",
