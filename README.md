@@ -220,6 +220,7 @@ asmith import old-session-archive/ --to codex --launch
 asmith merge ~/code/project --to codex --launch
 asmith import ~/exports/global-agent-config
 asmith import ~/exports/global-agent-config --to codex --launch
+asmith launch ~/imports/global-review --to codex --review-only
 ```
 
 Exports are preferred. Native Claude, Codex, and Copilot JSONL dumps are a recovery
@@ -232,9 +233,13 @@ copies visible files into an editable `candidate/`, and creates `HANDOFF.md` map
 each retained file to its user-home destination. Deleting a candidate explicitly
 excludes it; it is never silently restored or installed. The handoff flags hooks,
 active configuration, restrictive policy language, work/internal dependencies,
-SSH/network/tool limitations, and missing cross-file references. A launched agent
-must present a keep/adapt/omit plan and receive explicit approval before changing
-live configuration.
+SSH/network/tool limitations, and missing cross-file references. It requires the
+destination agent to preserve applicable instruction meaning with minimal disclosed
+changes, deduplicate overlapping sources, and normalize paths into a self-contained
+native configuration that does not reference another agent home, the export, or the
+prepared import. A launched agent must present a keep/adapt/omit plan and receive
+explicit approval before changing live configuration. For a safe test drive,
+`launch --to codex --review-only` uses Codex's enforced read-only sandbox.
 
 The destination adapter starts a **new native session** with instructions to read
 the handoff. Agentsmith does not fabricate private JSONL/SQLite records. `merge`

@@ -339,6 +339,16 @@ After your manual review, launch an agent against that exact prepared directory:
 $ asmith launch ~/imports/global-review --to codex
 ```
 
+For a test drive that cannot change configuration:
+
+```console
+$ asmith launch ~/imports/global-review --to codex --review-only
+```
+
+This launches Codex with its enforced read-only sandbox rooted at the prepared
+import. It can compare the candidate with live configuration and present the plan,
+but it cannot edit either one.
+
 Or prepare and launch immediately:
 
 ```console
@@ -350,6 +360,12 @@ agent to:
 
 - inventory only files still present under `candidate/`;
 - compare them with live configuration and avoid blind overwrites;
+- preserve applicable instruction meaning verbatim, making only necessary and
+  disclosed changes;
+- deduplicate overlapping instructions and normalize paths into the destination
+  agent's native layout;
+- make the installed result self-contained, with no references to another agent
+  home, the export bundle, `source/`, or `candidate/`;
 - flag hooks, active configuration, restrictive policies, and corporate/internal
   or machine-specific assumptions;
 - call out restrictions involving SSH, networking, tools, filesystem access,
@@ -358,6 +374,9 @@ agent to:
   or restoring the dependency;
 - present a **keep / adapt / omit** plan and receive explicit approval before
   writing live configuration.
+
+After validating the live result, the export bundle and prepared import may both be
+deleted; neither is a runtime dependency.
 
 This is an instruction/approval gate, not a replacement for your manual candidate
 review. The untouched `source/` remains available for provenance and recovery.

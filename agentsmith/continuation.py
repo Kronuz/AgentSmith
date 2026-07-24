@@ -371,13 +371,36 @@ def launch_command(result: ContinuationResult, harness: str, cwd: Path) -> list[
     raise ValueError(f"unsupported destination harness: {harness}")
 
 
-def global_launch_command(result: GlobalImportResult, harness: str) -> list[str]:
+def global_launch_command(
+    result: GlobalImportResult, harness: str, *, review_only: bool = False
+) -> list[str]:
+    mode = (
+        "This is a read-only test drive: do not modify any file or configuration. "
+        if review_only
+        else (
+            "Do not install or modify anything until you have presented the "
+            "keep/adapt/omit plan and I explicitly approve it. "
+        )
+    )
     prompt = (
-        f"Read {result.handoff}. Audit the editable candidate configuration against "
-        "the live global configuration. Do not install or modify anything until you "
-        "have presented the keep/adapt/omit plan and I explicitly approve it."
+        f"Read {result.handoff}. Treat {harness} as the sole destination agent and "
+        "audit the editable candidate configuration against its live global "
+        f"configuration. {mode}"
+        "Consolidate applicable instructions into the destination's native layout; "
+        "do not leave runtime dependencies on another agent's home directory."
     )
     if harness == "codex":
+        if review_only:
+            return [
+                "codex",
+                "--sandbox",
+                "read-only",
+                "--ask-for-approval",
+                "never",
+                "-C",
+                str(result.root),
+                prompt,
+            ]
         return [
             "codex",
             "--dangerously-bypass-approvals-and-sandbox",
@@ -440,17 +463,42 @@ def prepare_global_import(
                 "justification."
             ),
             (
-                "4. Critically assess instructions and hooks for this machine and work "
+                "4. Preserve applicable instruction meaning verbatim whenever the "
+                "destination supports it. Make only the minimum changes required for "
+                "destination syntax, deduplication, conflicts, path portability, or "
+                "user-approved policy changes, and disclose every substantive change."
+            ),
+            (
+                "5. Normalize paths and cross-file references into the destination "
+                "agent's native layout. The installed result must not depend at runtime "
+                "on another agent's home (such as `~/.claude` or `~/.copilot`) merely "
+                "because that agent supplied the source."
+            ),
+            (
+                "6. The installed result must be self-contained after migration. Copy "
+                "or merge every retained dependency into the destination's live "
+                "configuration; never leave references to the original export bundle, "
+                "`source/`, `candidate/`, or any other prepared-import path. The user "
+                "will delete both the export and prepared import after validation."
+            ),
+            (
+                "7. Consolidate overlapping instruction sources for the selected "
+                "destination instead of installing parallel Claude/Codex/Copilot copies. "
+                "Treat the destination map below as source provenance and native restore "
+                "hints, not as an order to install every agent's configuration."
+            ),
+            (
+                "8. Critically assess instructions and hooks for this machine and work "
                 "environment. Flag restrictions on SSH, networking, tools, filesystem "
                 "access, external services, internal/company systems, or agent autonomy."
             ),
             (
-                "5. Check references and dependencies among kept files. If a kept file "
+                "9. Check references and dependencies among kept files. If a kept file "
                 "references a deleted or missing file, propose removing/adapting the "
                 "reference or restoring the dependency, and ask the user which."
             ),
             (
-                "6. Present a keep/adapt/omit plan, all conflicts, and all potentially "
+                "10. Present a keep/adapt/omit plan, all conflicts, and all potentially "
                 "functionality-limiting policies. Ask for explicit approval before "
                 "writing anything under the live home configuration."
             ),

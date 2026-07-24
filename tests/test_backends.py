@@ -487,6 +487,14 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("~/.claude/rules/shared.md", import_instructions)
         self.assertIn("~/.copilot/instructions/shared.md", import_instructions)
         self.assertIn("explicit user exclusion", import_instructions)
+        self.assertIn(
+            "Preserve applicable instruction meaning verbatim", import_instructions
+        )
+        self.assertIn("must not depend at runtime", import_instructions)
+        self.assertIn("original export bundle", import_instructions)
+        self.assertIn(
+            "Consolidate overlapping instruction sources", import_instructions
+        )
         self.assertTrue((global_staging / "candidate").is_dir())
         self.assertTrue((global_staging / "source").is_dir())
         fake_bin = self.root / "bin"
@@ -503,6 +511,15 @@ class BackendFixturesTest(unittest.TestCase):
         )
         self.assertIn("fake-codex", launched.stdout)
         self.assertIn(str(global_staging / "HANDOFF.md"), launched.stdout)
+        review = self.run_cli(
+            "launch",
+            str(global_staging),
+            "--to",
+            "codex",
+            "--review-only",
+        )
+        self.assertIn("--sandbox read-only", review.stdout)
+        self.assertIn("sole destination agent", review.stdout)
         import_help = self.run_cli("import", "--help")
         self.assertNotIn("--harness", import_help.stdout)
         self.assertIn("SOURCE", import_help.stdout)
