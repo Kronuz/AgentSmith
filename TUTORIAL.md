@@ -115,6 +115,7 @@ $ asmith dump 038f5820 --no-subagents  # hide subagent (task) turns
 $ asmith dump 038f5820 --md > chat.md  # Markdown (view with glow / bat / VS Code)
 $ asmith dump 038f5820 --color -o chat.ansi   # keep ANSI in the file; then `cat chat.ansi`
 $ asmith dump 038f5820 --raw -o raw.jsonl      # one transcript, byte-for-byte
+$ asmith export . -o ~/exports/project-sessions # every session for this cwd
 ```
 
 **Subagents** (spawned by the `task` tool) are shown nested and labeled under a
@@ -124,6 +125,10 @@ separate files that `asmith dump` merges in — a Claude session can have dozens
 
 Note the default view is a cleaned reconstruction (system reminders stripped, tool
 results truncated). Use `--raw` when you want the exact underlying file.
+
+For a portable archive, use `asmith export`. Unlike singular `dump`, a path exports
+every session whose cwd exactly matches it. Add `--recursive` for nested cwd paths
+and `--include-memory` for shared project memory.
 
 ---
 

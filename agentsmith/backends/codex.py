@@ -399,6 +399,34 @@ class CodexBackend(Backend):
         path = self.raw_path(session_id)
         return path.parent if path is not None else None
 
+    def _child_ids(self, session_id: str) -> list[str]:
+        if not CODEX_DB.exists():
+            return []
+        try:
+            rows = self.con().execute(
+                "WITH RECURSIVE descendants(id) AS ("
+                " SELECT child_thread_id FROM thread_spawn_edges"
+                " WHERE parent_thread_id = ?"
+                " UNION ALL"
+                " SELECT e.child_thread_id FROM thread_spawn_edges e"
+                " JOIN descendants d ON e.parent_thread_id = d.id"
+                ") SELECT id FROM descendants",
+                (session_id,),
+            )
+            return [str(row[0]) for row in rows]
+        except sqlite3.OperationalError:
+            return []
+
+    @override
+    def artifact_paths(self, session_id: str) -> list[Path]:
+        artifacts: list[Path] = []
+        for sid in [session_id, *self._child_ids(session_id)]:
+            path = self._path(sid)
+            if path is not None and path.exists():
+                artifacts.append(path)
+            artifacts.extend(CODEX_HOME.glob(f"shell_snapshots/{sid}.*"))
+        return artifacts
+
     @override
     def remove(
         self, session_id: str, dry_run: bool = False, aggressive: bool = False

@@ -277,6 +277,11 @@ class CopilotBackend(Backend):
         p = STATE_DIR / session_id
         return p if p.exists() else None
 
+    @override
+    def artifact_paths(self, session_id: str) -> list[Path]:
+        state = STATE_DIR / session_id
+        return [state] if state.exists() else []
+
     _TABLES = (
         "turns",
         "checkpoints",

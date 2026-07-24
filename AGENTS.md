@@ -26,6 +26,7 @@ because it needed a working agent (`copilot -p`) that isn't reliably available.
 | `agentsmith/util.py` | Color/time/text helpers, `die`. |
 | `agentsmith/purge.py` | `deep_purge` (the shred). |
 | `agentsmith/scan.py` | `run`/`scan_file`/`scan_db` (the everywhere-scanner behind `asmith redact`). |
+| `agentsmith/export.py` | Atomic portable bundle writer (manifest, hashes, normalized and native files). |
 | `agentsmith/config.py` | Shared paths (`CACHE_DIR`, `HARNESSES`). |
 | `agentsmith/backends/base.py` | The `Backend` ABC + shared id/path resolution helpers. |
 | `agentsmith/backends/copilot.py` | `CopilotBackend` + copilot store paths. |

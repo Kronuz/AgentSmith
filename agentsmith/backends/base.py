@@ -63,6 +63,15 @@ class Backend(ABC):
     @abstractmethod
     def state_location(self, session_id: str) -> Path | None: ...
 
+    def artifact_paths(self, session_id: str) -> list[Path]:
+        """Native, session-owned files/directories suitable for an export."""
+        raw = self.raw_path(session_id)
+        return [raw] if raw is not None else []
+
+    def memory_paths(self, session_id: str) -> list[Path]:
+        """Project-scoped memory associated with a session, if attributable."""
+        return []
+
     # shared helpers -------------------------------------------------------
 
     def match_id(self, arg: str) -> list[Session]:

@@ -20,7 +20,8 @@ Two parts:
 
 - **`agentsmith/`** — the engine, a Python package (stdlib only, no dependencies):
   - `cli.py` (commands + argument parsing), `model.py` (dataclasses),
-    `util.py` (helpers), `purge.py` (the shred), `config.py` (shared paths),
+    `util.py` (helpers), `export.py` (portable bundles), `purge.py` (the shred),
+    `config.py` (shared paths),
     and `backends/` with `base.py` (the `Backend` ABC), one module per harness,
     and `__init__.py` (selection + cross-harness resolution). Run it directly with
     `python -m agentsmith ...`.
@@ -111,6 +112,7 @@ the full id).
 | `asmith resolve [id/prefix/path]` | Print the **full** session id for a short hash/prefix/dir (`--resumable`, `--with-harness`). |
 | `asmith show <session>` | Metadata: cwd, repo/branch, times, turns, files, tokens/AIU, checkpoints, resume line. |
 | `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
+| `asmith export <id/path> -o DIR` | Create a portable, checksummed bundle. A path exports every exact-cwd session; `--recursive` includes nested cwd paths; `--include-memory` adds attributable project memory. |
 | `asmith search <query…>` | Search sessions (Copilot FTS5; Claude/Codex transcript scan). |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
 | `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under all harness homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
@@ -160,6 +162,23 @@ that flag is handy there.)
 Note the default view is a cleaned reconstruction (user/assistant text, system
 reminders stripped, tool results truncated). Use `--raw` for the byte-for-byte
 transcript file.
+
+## Portable exports
+
+`dump` intentionally remains a one-session, stream-friendly command. A path selects
+the newest session, and `--raw` emits or copies that one native transcript. Use
+`export` when a path has multiple sessions or when you need a moveable archive:
+
+```sh
+asmith export 10b72094 -o ~/exports/one-session
+asmith export . -o ~/exports/all-sessions-here
+asmith export ~/code/project --recursive --include-memory -o ~/exports/project
+```
+
+The destination must be new. Each bundle has a versioned `manifest.json` with a
+SHA-256 inventory, normalized `conversation.md`, metadata, usage and touched-file
+records, plus the harness's native session-owned files. Project memory is excluded
+unless explicitly requested because it can be shared by many sessions.
 
 ## Shredding sessions (`asmith rm`)
 

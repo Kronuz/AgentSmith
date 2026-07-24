@@ -340,6 +340,25 @@ class ClaudeBackend(Backend):
         return path.parent if path is not None else None
 
     @override
+    def artifact_paths(self, session_id: str) -> list[Path]:
+        path = self._path(session_id)
+        if path is None:
+            return []
+        artifacts = [path]
+        subagents = path.with_suffix("") / "subagents"
+        if subagents.is_dir():
+            artifacts.append(subagents)
+        return artifacts
+
+    @override
+    def memory_paths(self, session_id: str) -> list[Path]:
+        path = self._path(session_id)
+        if path is None:
+            return []
+        memory = path.parent / "memory"
+        return [memory] if memory.is_dir() else []
+
+    @override
     def remove(
         self, session_id: str, dry_run: bool = False, aggressive: bool = False
     ) -> PurgeReport:

@@ -20,6 +20,7 @@ from .backends import (
     resolve,
     select_backends,
 )
+from .export import ExportItem, export_bundle
 from .model import CACHE_READ_WEIGHT, Msg, PurgeReport, SearchHit, Session
 from .util import (
     ago,
@@ -465,6 +466,61 @@ def cmd_dump(args: argparse.Namespace) -> None:
         print(f"wrote {args.out} ({len(msgs)} messages)")
     else:
         print(text)
+
+
+def cmd_export(args: argparse.Namespace) -> None:
+    backends = select_backends(args.harness)
+    pairs: list[tuple[Backend, Session]] = []
+    if looks_like_path(args.target):
+        root = real(args.target)
+        prefix = root.rstrip(os.sep) + os.sep
+        for backend in backends:
+            for session in backend.list_sessions():
+                if not session.cwd:
+                    continue
+                cwd = real(session.cwd)
+                if cwd == root or (args.recursive and cwd.startswith(prefix)):
+                    pairs.append((backend, session))
+        if not pairs:
+            scope = "at or below" if args.recursive else "for"
+            die(f"no sessions {scope} directory: {root}")
+    else:
+        pairs.append(resolve(backends, args.target))
+    pairs.sort(key=lambda pair: parse_ts(pair[1].updated_at))
+
+    render_args = argparse.Namespace(
+        assistant_only=False,
+        color=False,
+        no_color=True,
+        reasoning=True,
+        tools=True,
+        user_only=False,
+    )
+    items: list[ExportItem] = []
+    for backend, session in pairs:
+        messages = backend.transcript(session.id, subagents=True)
+        heading = (
+            f"# {session.name or short(session.id)}\n\n"
+            f"`{session.cwd or ''}` · _{session.harness}_ · `{session.id}`\n\n"
+        )
+        conversation = heading + render_chat(messages, render_args, md=True) + "\n"
+        items.append(ExportItem(backend, session, conversation))
+    try:
+        export_bundle(
+            items,
+            Path(args.out),
+            target=args.target,
+            include_memory=args.include_memory,
+            recursive=args.recursive,
+        )
+    except FileExistsError as exc:
+        die(str(exc))
+    print(
+        green(
+            f"exported {len(items)} session(s) to "
+            f"{Path(args.out).expanduser().resolve()}"
+        )
+    )
 
 
 def cmd_search(args: argparse.Namespace) -> None:
@@ -1292,6 +1348,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("-o", "--out", help="write to FILE")
     sp.set_defaults(func=cmd_dump)
+
+    sp = sub.add_parser(
+        "export",
+        parents=[common],
+        help="export portable session bundle(s) to a new directory",
+        description=(
+            "Export an id/prefix as one session, or a path as every session whose "
+            "cwd exactly matches it. --recursive also includes nested cwd paths. "
+            "The destination must not already exist."
+        ),
+    )
+    _mark(
+        sp.add_argument("target", help="session id/prefix or directory path"),
+        "both",
+    )
+    sp.add_argument("-o", "--out", required=True, help="new destination DIRECTORY")
+    sp.add_argument(
+        "--recursive",
+        action="store_true",
+        help="for a path, include sessions in nested directories",
+    )
+    sp.add_argument(
+        "--include-memory",
+        action="store_true",
+        help="include attributable project-scoped memory (shared across sessions)",
+    )
+    sp.set_defaults(func=cmd_export)
 
     sp = sub.add_parser("search", parents=[common], help="search across sessions")
     sp.add_argument("query", nargs="+", help="query terms")
