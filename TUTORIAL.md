@@ -213,7 +213,7 @@ The prepared directory contains `HANDOFF.md`, `manifest.json`, and preserved sou
 Inspect it, then launch the exact prepared import:
 
 ```console
-$ asmith launch ~/imports/project-codex --to codex
+$ asmith launch codex ~/imports/project-codex/HANDOFF.md
 ```
 
 For a quick path with no pause for manual inspection:
@@ -253,7 +253,7 @@ To combine all live sessions for a directory into one continuation:
 
 ```console
 $ asmith merge ~/code/project --to codex -o ~/imports/merged
-$ asmith launch ~/imports/merged --to codex
+$ asmith launch codex ~/imports/merged/HANDOFF.md
 ```
 
 `merge` leaves every original session untouched.
@@ -336,13 +336,13 @@ Edit a candidate when a policy is useful but needs adaptation.
 After your manual review, launch an agent against that exact prepared directory:
 
 ```console
-$ asmith launch ~/imports/global-review --to codex
+$ asmith launch codex ~/imports/global-review/HANDOFF.md
 ```
 
 For a test drive that cannot change configuration:
 
 ```console
-$ asmith launch ~/imports/global-review --to codex --review-only
+$ asmith launch codex ~/imports/global-review/HANDOFF.md --review-only
 ```
 
 This launches Codex with its enforced read-only sandbox rooted at the prepared
@@ -516,7 +516,7 @@ owns the id automatically — you never qualify it.
 | Export a session/project | `asmith export <id/PROJECT…> -o BUNDLE` |
 | Export globals | `asmith export --global -o BUNDLE` (or target an agent home) |
 | Prepare an import | `asmith import SOURCE [--to AGENT] -o PREPARED` |
-| Launch reviewed import | `asmith launch PREPARED --to AGENT` |
+| Launch a handoff | `asmith launch AGENT HANDOFF` |
 | Find which session discussed X | `asmith search <words>` |
 | Grep transcripts | `asmith grep <regex> [id]` |
 | Inspect a session | `asmith show <id>` · `asmith files <id>` · `asmith usage <id>` |

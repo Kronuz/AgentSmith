@@ -122,7 +122,7 @@ the full id).
 | `asmith export [TARGET…] -o BUNDLE` | Export sessions/projects, defaulting to the current project. An exact agent-home target such as `~/.codex` exports that agent's globals; `--global` exports all globals. |
 | `asmith verify <bundle>` | Verify the export schema, safe relative paths, sizes, and every SHA-256 checksum. |
 | `asmith import SOURCE… [--to AGENT] [-o PREPARED]` | Infer project/global scope from each source. Project imports require `--to`; global imports create an editable `candidate/` and critical-review `HANDOFF.md`. |
-| `asmith launch PREPARED --to AGENT` | Launch an agent against the exact prepared import after manual review/editing. |
+| `asmith launch AGENT HANDOFF` | Launch an agent with a prepared directory, its printed `HANDOFF.md`, or any standalone handoff file. `--cwd` selects the workspace. |
 | `asmith merge [path] --to AGENT` | Normalize all live sessions for a directory into one prepared continuation without modifying the originals. |
 | `asmith search <query…>` | Literal-phrase search across sessions (Copilot FTS5; Claude/Codex scan), merged by recency. |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
@@ -220,7 +220,7 @@ asmith import old-session-archive/ --to codex --launch
 asmith merge ~/code/project --to codex --launch
 asmith import ~/exports/global-agent-config
 asmith import ~/exports/global-agent-config --to codex --launch
-asmith launch ~/imports/global-review --to codex --review-only
+asmith launch codex ~/imports/global-review/HANDOFF.md --review-only
 ```
 
 Exports are preferred. Native Claude, Codex, and Copilot JSONL dumps are a recovery
@@ -239,7 +239,7 @@ changes, deduplicate overlapping sources, and normalize paths into a self-contai
 native configuration that does not reference another agent home, the export, or the
 prepared import. A launched agent must present a keep/adapt/omit plan and receive
 explicit approval before changing live configuration. For a safe test drive,
-`launch --to codex --review-only` uses Codex's enforced read-only sandbox.
+`launch codex HANDOFF --review-only` uses Codex's enforced read-only sandbox.
 
 The destination adapter starts a **new native session** with instructions to read
 the handoff. Agentsmith does not fabricate private JSONL/SQLite records. `merge`
@@ -247,6 +247,17 @@ uses the same export/import pipeline, orders live sessions chronologically, reta
 their native artifacts, and leaves every original untouched. Exceptionally long
 histories can produce multi-megabyte handoffs; the destination should inspect them
 selectively rather than assuming the entire file fits in one context window.
+
+`launch` also accepts an arbitrary handoff document; it is not limited to imports:
+
+```sh
+asmith launch codex ./HANDOFF.md
+asmith launch claude ./design/next-steps.md --cwd ~/code/project
+```
+
+A prepared directory and its printed `HANDOFF.md` are interchangeable launch inputs.
+Prepared continuations carry their working directory in the manifest; `--cwd`
+overrides it and selects the workspace for standalone files.
 
 ## Shredding sessions (`asmith rm`)
 

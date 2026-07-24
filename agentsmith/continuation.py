@@ -351,11 +351,31 @@ def prepare_continuation(
     )
 
 
-def launch_command(result: ContinuationResult, harness: str, cwd: Path) -> list[str]:
-    prompt = (
-        f"Read {result.handoff}, verify its history against the current working tree, "
-        "and continue the unfinished work."
+def handoff_launch_command(
+    handoff: Path,
+    harness: str,
+    cwd: Path,
+    *,
+    review_only: bool = False,
+    prompt: str | None = None,
+) -> list[str]:
+    prompt = prompt or (
+        f"Read {handoff}, reconcile it with the working directory, and carry out the "
+        "handoff. Inspect current state before acting because the handoff may be stale."
     )
+    if review_only and harness != "codex":
+        raise ValueError("review-only launch currently requires Codex")
+    if harness == "codex" and review_only:
+        return [
+            "codex",
+            "--sandbox",
+            "read-only",
+            "--ask-for-approval",
+            "never",
+            "-C",
+            str(cwd),
+            prompt,
+        ]
     if harness == "codex":
         return [
             "codex",
@@ -369,6 +389,26 @@ def launch_command(result: ContinuationResult, harness: str, cwd: Path) -> list[
     if harness == "copilot":
         return ["copilot", "--yolo", prompt]
     raise ValueError(f"unsupported destination harness: {harness}")
+
+
+def launch_command(
+    result: ContinuationResult,
+    harness: str,
+    cwd: Path,
+    *,
+    review_only: bool = False,
+) -> list[str]:
+    prompt = (
+        f"Read {result.handoff}, verify its history against the current working tree, "
+        "and continue the unfinished work."
+    )
+    return handoff_launch_command(
+        result.handoff,
+        harness,
+        cwd,
+        review_only=review_only,
+        prompt=prompt,
+    )
 
 
 def global_launch_command(
@@ -389,30 +429,13 @@ def global_launch_command(
         "Consolidate applicable instructions into the destination's native layout; "
         "do not leave runtime dependencies on another agent's home directory."
     )
-    if harness == "codex":
-        if review_only:
-            return [
-                "codex",
-                "--sandbox",
-                "read-only",
-                "--ask-for-approval",
-                "never",
-                "-C",
-                str(result.root),
-                prompt,
-            ]
-        return [
-            "codex",
-            "--dangerously-bypass-approvals-and-sandbox",
-            "-C",
-            str(Path.home()),
-            prompt,
-        ]
-    if harness == "claude":
-        return ["claude", "--dangerously-skip-permissions", prompt]
-    if harness == "copilot":
-        return ["copilot", "--yolo", prompt]
-    raise ValueError(f"unsupported destination harness: {harness}")
+    return handoff_launch_command(
+        result.handoff,
+        harness,
+        result.root if review_only else Path.home(),
+        review_only=review_only,
+        prompt=prompt,
+    )
 
 
 def prepare_global_import(

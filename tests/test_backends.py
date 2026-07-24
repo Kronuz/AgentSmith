@@ -483,6 +483,10 @@ class BackendFixturesTest(unittest.TestCase):
             str(global_staging),
         )
         self.assertIn("staged", global_import.stdout)
+        self.assertIn(
+            f"next: asmith launch AGENT {global_staging.resolve() / 'HANDOFF.md'}",
+            global_import.stdout,
+        )
         import_instructions = (global_staging / "HANDOFF.md").read_text()
         self.assertIn("~/.claude/rules/shared.md", import_instructions)
         self.assertIn("~/.copilot/instructions/shared.md", import_instructions)
@@ -505,17 +509,15 @@ class BackendFixturesTest(unittest.TestCase):
         self.env["PATH"] = str(fake_bin) + os.pathsep + self.env.get("PATH", "")
         launched = self.run_cli(
             "launch",
-            str(global_staging),
-            "--to",
             "codex",
+            str(global_staging / "HANDOFF.md"),
         )
         self.assertIn("fake-codex", launched.stdout)
         self.assertIn(str(global_staging / "HANDOFF.md"), launched.stdout)
         review = self.run_cli(
             "launch",
-            str(global_staging),
-            "--to",
             "codex",
+            str(global_staging / "HANDOFF.md"),
             "--review-only",
         )
         self.assertIn("--sandbox read-only", review.stdout)
@@ -526,10 +528,27 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("PREPARED", import_help.stdout)
         launch_help = self.run_cli("launch", "--help")
         self.assertNotIn("--harness", launch_help.stdout)
-        self.assertIn("PREPARED", launch_help.stdout)
+        self.assertNotIn("--to", launch_help.stdout)
+        self.assertIn("AGENT", launch_help.stdout)
+        self.assertIn("HANDOFF", launch_help.stdout)
+        top_help = self.run_cli("--help")
+        self.assertNotIn("==SUPPRESS==", top_help.stdout)
+        self.assertNotIn("export-global", top_help.stdout)
+        self.assertNotIn("import-global", top_help.stdout)
         export_help = self.run_cli("export", "--help")
         self.assertIn("TARGET", export_help.stdout)
         self.assertIn("BUNDLE", export_help.stdout)
+
+        standalone = self.root / "standalone-handoff.md"
+        standalone.write_text("# Continue this work\n")
+        generic = self.run_cli(
+            "launch",
+            "codex",
+            str(standalone),
+            "--cwd",
+            str(self.cwd),
+        )
+        self.assertIn(str(standalone), generic.stdout)
 
         claude_global = self.root / "claude-global"
         self.run_cli(

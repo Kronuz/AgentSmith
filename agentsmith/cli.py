@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,7 @@ from .continuation import (
     ContinuationResult,
     GlobalImportResult,
     global_launch_command,
+    handoff_launch_command,
     launch_command,
     prepare_continuation,
     prepare_global_import,
@@ -61,6 +63,11 @@ from .util import (
     trunc_lines,
     yellow,
 )
+
+
+def _print_handoff(path: Path, agent: str | None = None) -> None:
+    print(f"handoff: {path}")
+    print(f"next: asmith launch {agent or 'AGENT'} {shlex.quote(str(path))}")
 
 
 def _term_cols() -> int:
@@ -644,7 +651,7 @@ def cmd_merge(args: argparse.Namespace) -> None:
     print(
         green(f"merged {result.sessions} session(s) into continuation at {result.root}")
     )
-    print(f"handoff: {result.handoff}")
+    _print_handoff(result.handoff, args.to)
     for warning in result.warnings:
         print(yellow(f"warning: {warning}"), file=sys.stderr)
     if args.launch:
@@ -713,7 +720,7 @@ def cmd_import(args: argparse.Namespace) -> None:
             f"{result.sources} source(s) at {result.root}"
         )
     )
-    print(f"handoff: {result.handoff}")
+    _print_handoff(result.handoff, args.to)
     for warning in result.warnings:
         print(yellow(f"warning: {warning}"), file=sys.stderr)
     if args.launch:
@@ -744,7 +751,7 @@ def cmd_import_global(args: argparse.Namespace) -> None:
             f"staged {result.files} global agent configuration file(s) at {result.root}"
         )
     )
-    print(f"handoff: {result.handoff}")
+    _print_handoff(result.handoff, args.to)
     if args.launch:
         if not args.to:
             die("--launch requires --to copilot|claude|codex")
@@ -761,26 +768,36 @@ def cmd_import_global(args: argparse.Namespace) -> None:
 
 
 def cmd_launch(args: argparse.Namespace) -> None:
-    root = Path(args.prepared).expanduser().resolve()
-    try:
-        manifest = json.loads((root / "manifest.json").read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        die(f"cannot read prepared import manifest: {exc}")
-    handoff = root / "HANDOFF.md"
+    if args.review_only and args.agent != "codex":
+        die("--review-only currently requires AGENT codex")
+    supplied = Path(args.handoff).expanduser().resolve()
+    root = supplied if supplied.is_dir() else supplied.parent
+    handoff = root / "HANDOFF.md" if supplied.is_dir() else supplied
     if not handoff.is_file():
-        die(f"prepared import has no HANDOFF.md: {root}")
+        die(f"handoff does not exist or is not a file: {handoff}")
+    manifest_path = root / "manifest.json"
+    try:
+        manifest = (
+            json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        die(f"cannot read adjacent prepared-import manifest: {exc}")
     schema = manifest.get("schema")
     if schema == "agentsmith-global-import":
-        if args.review_only and args.to != "codex":
-            die("--review-only currently requires --to codex")
         result = GlobalImportResult(root, handoff, int(manifest.get("files", 0)))
-        command = global_launch_command(result, args.to, review_only=args.review_only)
+        command = global_launch_command(
+            result, args.agent, review_only=args.review_only
+        )
         cwd = root if args.review_only else Path.home()
     elif schema == "agentsmith-continuation":
-        if args.review_only:
-            die("--review-only is only available for global imports")
         cwd_value = manifest.get("cwd")
-        cwd = Path(cwd_value) if isinstance(cwd_value, str) else Path.cwd()
+        cwd = (
+            Path(args.cwd).expanduser().resolve()
+            if args.cwd
+            else Path(cwd_value)
+            if isinstance(cwd_value, str)
+            else Path.cwd()
+        )
         if not cwd.is_dir():
             die(f"prepared continuation working directory is missing: {cwd}")
         result2 = ContinuationResult(
@@ -792,9 +809,19 @@ def cmd_launch(args: argparse.Namespace) -> None:
             int(manifest.get("sessions", 0)),
             [],
         )
-        command = launch_command(result2, args.to, cwd)
+        command = launch_command(result2, args.agent, cwd, review_only=args.review_only)
     else:
-        die(f"not a prepared Agentsmith import: {root}")
+        cwd = (
+            Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd().resolve()
+        )
+        if not cwd.is_dir():
+            die(f"working directory does not exist: {cwd}")
+        try:
+            command = handoff_launch_command(
+                handoff, args.agent, cwd, review_only=args.review_only
+            )
+        except ValueError as exc:
+            die(str(exc))
     print(f"handoff: {handoff}")
     print(dim("launching: " + " ".join(command[:2]) + " …"), file=sys.stderr)
     try:
@@ -1702,25 +1729,6 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_export)
 
     sp = sub.add_parser(
-        "export-global",
-        parents=[common],
-        help=argparse.SUPPRESS,
-        description=(
-            "Create a separate portable bundle for global Claude/Codex/Copilot "
-            "configuration. Authentication and session stores are excluded, but "
-            "settings may contain inline secrets. The destination must be new."
-        ),
-    )
-    sp.add_argument(
-        "-o",
-        "--out",
-        required=True,
-        metavar="BUNDLE",
-        help="new checksummed export bundle directory",
-    )
-    sp.set_defaults(func=cmd_export_global)
-
-    sp = sub.add_parser(
         "verify",
         parents=[common],
         help="verify a portable export manifest and every checksum",
@@ -1793,12 +1801,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_import)
 
     sp = sub.add_parser(
-        "import-global",
-        help=argparse.SUPPRESS,
+        "launch",
+        help="launch an agent with a prepared import or any handoff file",
         description=(
-            "Prepare a global export on this machine without overwriting live "
-            "configuration. HANDOFF.md audits an editable candidate tree and maps "
-            "every retained file to its user-home destination."
+            "Launch an agent in YOLO mode with a prepared import directory, its "
+            "HANDOFF.md, or any standalone handoff file."
         ),
     )
     sp.add_argument(
@@ -1806,54 +1813,25 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="disable ANSI color (also honored via the NO_COLOR env var)",
     )
-    sp.add_argument("bundle", metavar="BUNDLE", help="global export bundle directory")
     sp.add_argument(
-        "-o",
-        "--out",
-        metavar="PREPARED",
-        help="new prepared import directory (default: XDG state directory)",
-    )
-    sp.add_argument(
-        "--to",
+        "agent",
         choices=("copilot", "claude", "codex"),
-        help="destination agent for --launch",
+        metavar="AGENT",
+        help="agent to launch",
     )
     sp.add_argument(
-        "--launch",
-        action="store_true",
-        help="launch an agent to audit candidate files (approval required before apply)",
+        "handoff",
+        metavar="HANDOFF",
+        help="prepared import directory or handoff file",
+    )
+    sp.add_argument(
+        "--cwd",
+        help="working directory for a standalone handoff or override for a continuation",
     )
     sp.add_argument(
         "--review-only",
         action="store_true",
-        help="launch Codex in an enforced read-only sandbox (requires --launch)",
-    )
-    sp.set_defaults(func=cmd_import_global)
-
-    sp = sub.add_parser(
-        "launch",
-        help="launch an agent against an already-reviewed prepared import",
-    )
-    sp.add_argument(
-        "--no-color",
-        action="store_true",
-        help="disable ANSI color (also honored via the NO_COLOR env var)",
-    )
-    sp.add_argument(
-        "prepared",
-        metavar="PREPARED",
-        help="prepared import directory containing HANDOFF.md",
-    )
-    sp.add_argument(
-        "--to",
-        choices=("copilot", "claude", "codex"),
-        required=True,
-        help="destination agent",
-    )
-    sp.add_argument(
-        "--review-only",
-        action="store_true",
-        help="audit a global import with Codex in an enforced read-only sandbox",
+        help="launch Codex with an enforced read-only sandbox",
     )
     sp.set_defaults(func=cmd_launch)
 
@@ -2141,6 +2119,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
+    argv = list(argv)
+    if argv and argv[0] == "export-global":
+        argv = ["export", "--global", *argv[1:]]
+    elif argv and argv[0] == "import-global":
+        argv = ["import", "--global", *argv[1:]]
+    elif argv and argv[0] == "launch" and "--to" in argv:
+        index = argv.index("--to")
+        if index + 1 < len(argv):
+            agent = argv[index + 1]
+            remainder = argv[1:index] + argv[index + 2 :]
+            argv = ["launch", agent, *remainder]
     args = build_parser().parse_args(argv)
     if getattr(args, "no_color", False):
         set_color(False)
