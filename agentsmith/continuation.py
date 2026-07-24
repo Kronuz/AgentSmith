@@ -172,6 +172,12 @@ def _bundle_conversations(source: Path) -> tuple[list[str], int, list[str]]:
             warnings.append(
                 f"missing normalized conversation for {harness}:{session_id}"
             )
+        memory = entry.get("project_memory")
+        if isinstance(memory, list) and memory:
+            conversations.append(
+                "## Preserved project memory\n\n"
+                + "\n".join(f"- `{item}`" for item in memory)
+            )
     environment = manifest.get("environment")
     if isinstance(environment, list) and environment:
         lines = [
@@ -193,6 +199,12 @@ def _bundle_conversations(source: Path) -> tuple[list[str], int, list[str]]:
         conversations.append("\n".join(lines))
         warnings.append(
             f"{len(environment)} environment file(s) staged for review, not installed"
+        )
+    bundle_memory = manifest.get("project_memory")
+    if isinstance(bundle_memory, list) and bundle_memory:
+        conversations.append(
+            "## Preserved project memory\n\n"
+            + "\n".join(f"- `{item}`" for item in bundle_memory)
         )
     return conversations, len(sessions), warnings
 

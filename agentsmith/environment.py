@@ -50,7 +50,10 @@ _USER_PATHS: dict[str, tuple[str, ...]] = {
         ".claude/commands",
         ".claude/agents",
         ".claude/hooks",
+        ".claude/rules",
         ".claude/skills",
+        ".claude/statusline.sh",
+        ".claude/workflow_orchestration.md",
     ),
     "codex": (
         ".codex/AGENTS.md",
@@ -61,8 +64,12 @@ _USER_PATHS: dict[str, tuple[str, ...]] = {
     "copilot": (
         ".copilot/config.json",
         ".copilot/mcp-config.json",
+        ".copilot/settings.json",
         ".copilot/copilot-instructions.md",
+        ".copilot/hooks",
         ".copilot/instructions",
+        ".copilot/skills",
+        ".copilot/statusline.sh",
     ),
 }
 

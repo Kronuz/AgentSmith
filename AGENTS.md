@@ -32,6 +32,7 @@ because it needed a working agent (`copilot -p`) that isn't reliably available.
 | `agentsmith/continuation.py` | Export/dump ingestion, prepared handoffs, and destination launch commands. |
 | `agentsmith/environment.py` | Allowlists for portable project/user agent instructions and configuration. |
 | `agentsmith/config.py` | Shared paths (`CACHE_DIR`, `STATE_DIR`, `HARNESSES`). |
+| `dev/repack-legacy-backup.py` | Auditable one-off repacker for the July 2026 mixed Claude/Copilot backup; deduplicates dumps and emits per-project/global bundles. |
 | `agentsmith/backends/base.py` | The `Backend` ABC + shared id/path resolution helpers. |
 | `agentsmith/backends/copilot.py` | `CopilotBackend` + copilot store paths. |
 | `agentsmith/backends/claude.py` | `ClaudeBackend` + claude store paths. |
