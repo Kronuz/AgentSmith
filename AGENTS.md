@@ -191,7 +191,9 @@ into a file); `--raw` streams the underlying transcript file verbatim.
 
 ## Testing
 
-- Exercise all harnesses. Copilot has ~130 sessions; Claude has a handful of
+- Run `python -m unittest discover -s tests -v` for hermetic fixtures covering
+  all three backends, portable export, and Codex parent/child aggregation.
+- Also exercise real stores when available. Copilot has ~130 sessions; Claude has a handful of
   main sessions plus many nested `subagents/` transcripts (only the top-level
   `<id>.jsonl` are "sessions").
 - **Never test destructive paths on real data.** Point the env overrides at a

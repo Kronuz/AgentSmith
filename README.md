@@ -74,6 +74,9 @@ commands auto-detect which harness owns an id (UUIDs never collide).
 - **codex**: the newest `~/.codex/state_*.sqlite` for the thread index and dated rollout
   JSONL files under `~/.codex/sessions`. Archived or missing rollouts are not
   resumable. Usage includes input/output, cache, and reasoning tokens.
+  Delegated child threads are nested under their parent rather than listed as
+  independent sessions; their transcript, usage, files, export, and deletion are
+  aggregated with the parent.
 
 ## The session name
 

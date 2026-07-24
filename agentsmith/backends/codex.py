@@ -176,7 +176,20 @@ class CodexBackend(Backend):
 
     @override
     def list_sessions(self) -> list[Session]:
-        sessions = list(self._index().values())
+        children: set[str] = set()
+        if CODEX_DB.exists():
+            try:
+                children = {
+                    str(row[0])
+                    for row in self.con().execute(
+                        "SELECT child_thread_id FROM thread_spawn_edges"
+                    )
+                }
+            except sqlite3.OperationalError:
+                pass
+        sessions = [
+            session for sid, session in self._index().items() if sid not in children
+        ]
         sessions.sort(key=lambda s: s.updated_at or "", reverse=True)
         return sessions
 
@@ -267,14 +280,9 @@ class CodexBackend(Backend):
 
         if subagents and CODEX_DB.exists():
             try:
-                children = self.con().execute(
-                    "SELECT child_thread_id FROM thread_spawn_edges "
-                    "WHERE parent_thread_id = ?",
-                    (session_id,),
-                )
-                for row in children:
-                    for message in self.transcript(str(row[0]), subagents=False):
-                        message.agent = "codex-agent#" + str(row[0])[:6]
+                for child_id in self._child_ids(session_id):
+                    for message in self.transcript(child_id, subagents=False):
+                        message.agent = "codex-agent#" + child_id[:6]
                         messages.append(message)
             except sqlite3.OperationalError:
                 pass
@@ -292,62 +300,67 @@ class CodexBackend(Backend):
     @override
     def files(self, session_id: str) -> list[FileTouch]:
         seen: dict[str, FileTouch] = {}
-        for event in self._events(session_id):
-            payload = event.get("payload", {})
-            if event.get("type") != "response_item" or payload.get("type") not in {
-                "function_call",
-                "custom_tool_call",
-            }:
-                continue
-            name = str(payload.get("name", ""))
-            if name.rsplit(".", 1)[-1] not in _FILE_TOOLS:
-                continue
-            raw = payload.get("arguments", {"input": payload.get("input", "")})
-            args: dict[str, Any]
-            try:
-                parsed = json.loads(raw) if isinstance(raw, str) else raw
-                args = parsed if isinstance(parsed, dict) else {}
-            except json.JSONDecodeError:
-                args = {}
-            paths = [
-                str(args[key])
-                for key in ("file_path", "path")
-                if isinstance(args.get(key), str)
-            ]
-            patch = args.get("patch") or args.get("input")
-            if isinstance(patch, str):
-                paths.extend(_PATCH_PATH.findall(patch))
-            for path in paths:
-                seen.setdefault(path, FileTouch(path, name, None))
+        for sid in [session_id, *self._child_ids(session_id)]:
+            for event in self._events(sid):
+                payload = event.get("payload", {})
+                if event.get("type") != "response_item" or payload.get("type") not in {
+                    "function_call",
+                    "custom_tool_call",
+                }:
+                    continue
+                name = str(payload.get("name", ""))
+                if name.rsplit(".", 1)[-1] not in _FILE_TOOLS:
+                    continue
+                raw = payload.get("arguments", {"input": payload.get("input", "")})
+                args: dict[str, Any]
+                try:
+                    parsed = json.loads(raw) if isinstance(raw, str) else raw
+                    args = parsed if isinstance(parsed, dict) else {}
+                except json.JSONDecodeError:
+                    args = {}
+                paths = [
+                    str(args[key])
+                    for key in ("file_path", "path")
+                    if isinstance(args.get(key), str)
+                ]
+                patch = args.get("patch") or args.get("input")
+                if isinstance(patch, str):
+                    paths.extend(_PATCH_PATH.findall(patch))
+                for path in paths:
+                    seen.setdefault(path, FileTouch(path, name, None))
         return list(seen.values())
 
     @override
     def usage(self, session_id: str) -> list[UsageRow]:
         agg: dict[str, dict[str, int]] = {}
-        model = "?"
-        for event in self._events(session_id):
-            payload = event.get("payload", {})
-            if event.get("type") == "turn_context" and payload.get("model"):
-                model = str(payload["model"])
-            if event.get("type") != "event_msg" or payload.get("type") != "token_count":
-                continue
-            info = payload.get("info")
-            usage = info.get("last_token_usage") if isinstance(info, dict) else None
-            if not isinstance(usage, dict):
-                continue
-            row = agg.setdefault(
-                model, {"calls": 0, "i": 0, "o": 0, "cr": 0, "cw": 0, "r": 0}
-            )
-            row["calls"] += 1
-            total_input = int(usage.get("input_tokens", 0) or 0)
-            cached_input = int(usage.get("cached_input_tokens", 0) or 0)
-            # OpenAI reports cached input as a subset of input_tokens. UsageRow
-            # keeps fresh input and cache reads disjoint across backends.
-            row["i"] += max(0, total_input - cached_input)
-            row["o"] += int(usage.get("output_tokens", 0) or 0)
-            row["cr"] += cached_input
-            row["cw"] += int(usage.get("cache_write_input_tokens", 0) or 0)
-            row["r"] += int(usage.get("reasoning_output_tokens", 0) or 0)
+        for sid in [session_id, *self._child_ids(session_id)]:
+            model = "?"
+            for event in self._events(sid):
+                payload = event.get("payload", {})
+                if event.get("type") == "turn_context" and payload.get("model"):
+                    model = str(payload["model"])
+                if (
+                    event.get("type") != "event_msg"
+                    or payload.get("type") != "token_count"
+                ):
+                    continue
+                info = payload.get("info")
+                usage = info.get("last_token_usage") if isinstance(info, dict) else None
+                if not isinstance(usage, dict):
+                    continue
+                row = agg.setdefault(
+                    model, {"calls": 0, "i": 0, "o": 0, "cr": 0, "cw": 0, "r": 0}
+                )
+                row["calls"] += 1
+                total_input = int(usage.get("input_tokens", 0) or 0)
+                cached_input = int(usage.get("cached_input_tokens", 0) or 0)
+                # OpenAI reports cached input as a subset of input_tokens. UsageRow
+                # keeps fresh input and cache reads disjoint across backends.
+                row["i"] += max(0, total_input - cached_input)
+                row["o"] += int(usage.get("output_tokens", 0) or 0)
+                row["cr"] += cached_input
+                row["cw"] += int(usage.get("cache_write_input_tokens", 0) or 0)
+                row["r"] += int(usage.get("reasoning_output_tokens", 0) or 0)
         return [
             UsageRow(model, a["calls"], a["i"], a["o"], a["cr"], a["cw"], a["r"])
             for model, a in agg.items()
@@ -431,12 +444,17 @@ class CodexBackend(Backend):
     def remove(
         self, session_id: str, dry_run: bool = False, aggressive: bool = False
     ) -> PurgeReport:
+        session_ids = [session_id, *self._child_ids(session_id)]
+        placeholders = ",".join("?" for _sid in session_ids)
         rows = 0
         if CODEX_DB.exists():
             try:
                 rows = int(
                     self.con()
-                    .execute("SELECT COUNT(*) FROM threads WHERE id = ?", (session_id,))
+                    .execute(
+                        f"SELECT COUNT(*) FROM threads WHERE id IN ({placeholders})",
+                        session_ids,
+                    )
                     .fetchone()[0]
                 )
             except sqlite3.OperationalError:
@@ -453,15 +471,24 @@ class CodexBackend(Backend):
                         ):
                             try:
                                 rw.execute(
-                                    f"DELETE FROM {table} WHERE {column} = ?",
-                                    (session_id,),
+                                    f"DELETE FROM {table} "
+                                    f"WHERE {column} IN ({placeholders})",
+                                    session_ids,
                                 )
                             except sqlite3.OperationalError:
                                 pass
-                        rw.execute("DELETE FROM threads WHERE id = ?", (session_id,))
+                        rw.execute(
+                            f"DELETE FROM threads WHERE id IN ({placeholders})",
+                            session_ids,
+                        )
                 finally:
                     rw.close()
-        report = deep_purge(CODEX_HOME, session_id, dry_run, aggressive)
+        report = PurgeReport()
+        for sid in session_ids:
+            child_report = deep_purge(CODEX_HOME, sid, dry_run, aggressive)
+            report.removed.extend(child_report.removed)
+            report.scrubbed.extend(child_report.scrubbed)
+            report.remaining.extend(child_report.remaining)
         report.db_rows = rows
         if not dry_run:
             self._sessions = None
