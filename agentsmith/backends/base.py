@@ -72,6 +72,10 @@ class Backend(ABC):
         """Project-scoped memory associated with a session, if attributable."""
         return []
 
+    def scan_exclude_dirs(self) -> set[str]:
+        """Installation/cache directories that are not mutable harness state."""
+        return set()
+
     # shared helpers -------------------------------------------------------
 
     def match_id(self, arg: str) -> list[Session]:

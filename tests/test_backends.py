@@ -81,6 +81,9 @@ class BackendFixturesTest(unittest.TestCase):
               session_id TEXT, checkpoint_number INTEGER, title TEXT,
               overview TEXT, next_steps TEXT
             );
+            CREATE VIRTUAL TABLE search_index USING fts5(
+              content, session_id UNINDEXED, source_type UNINDEXED
+            );
             """
         )
         con.execute(
@@ -96,7 +99,11 @@ class BackendFixturesTest(unittest.TestCase):
             ),
         )
         con.execute(
-            "INSERT INTO turns VALUES (?, 0, 'hello', 'hi')",
+            "INSERT INTO turns VALUES (?, 0, 'hello there', 'hi')",
+            (sid,),
+        )
+        con.execute(
+            "INSERT INTO search_index VALUES ('hello there', ?, 'turn')",
             (sid,),
         )
         con.commit()
@@ -104,7 +111,7 @@ class BackendFixturesTest(unittest.TestCase):
         _jsonl(
             Path(self.env["COPILOT_STATE"]) / sid / "events.jsonl",
             [
-                {"type": "user.message", "data": {"content": "hello"}},
+                {"type": "user.message", "data": {"content": "hello there"}},
                 {"type": "assistant.message", "data": {"content": "hi"}},
             ],
         )
@@ -119,7 +126,7 @@ class BackendFixturesTest(unittest.TestCase):
                     "type": "user",
                     "cwd": str(self.cwd),
                     "timestamp": "2026-01-02T00:00:00Z",
-                    "message": {"content": "hello"},
+                    "message": {"content": "hello there"},
                 },
                 {
                     "type": "assistant",
@@ -148,7 +155,7 @@ class BackendFixturesTest(unittest.TestCase):
         parent_path = home / "sessions" / f"rollout-{parent}.jsonl"
         child_path = home / "sessions" / f"rollout-{child}.jsonl"
         for sid, path, prompt, usage in (
-            (parent, parent_path, "parent", (100, 80, 5)),
+            (parent, parent_path, "hello there", (100, 80, 5)),
             (child, child_path, "child", (50, 40, 3)),
         ):
             _jsonl(
@@ -244,6 +251,48 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertEqual(len(manifest["sessions"]), 3)
         memories = list((destination / "project-memory").rglob("MEMORY.md"))
         self.assertEqual(len(memories), 1)
+
+    def test_search_uses_literal_phrase_across_backends(self) -> None:
+        result = self.run_cli("search", "hello", "there", "-n", "10")
+        self.assertIn("11111111", result.stdout)
+        self.assertIn("22222222", result.stdout)
+        self.assertIn("33333333", result.stdout)
+
+    def test_usage_cache_invalidates_when_rollout_changes(self) -> None:
+        first = self.run_cli("usage", "-H", "codex", "33333333")
+        self.assertIn("fresh        30", first.stdout)
+        cache = (
+            Path(self.env["ASMITH_CACHE"])
+            / "usage"
+            / "codex"
+            / "33333333-3333-3333-3333-333333333333.json"
+        )
+        self.assertTrue(cache.is_file())
+        rollout = (
+            Path(self.env["CODEX_SESSIONS"])
+            / "rollout-33333333-3333-3333-3333-333333333333.jsonl"
+        )
+        with rollout.open("a") as stream:
+            stream.write(
+                json.dumps(
+                    {
+                        "type": "event_msg",
+                        "payload": {
+                            "type": "token_count",
+                            "info": {
+                                "last_token_usage": {
+                                    "input_tokens": 20,
+                                    "cached_input_tokens": 0,
+                                    "output_tokens": 1,
+                                }
+                            },
+                        },
+                    }
+                )
+                + "\n"
+            )
+        second = self.run_cli("usage", "-H", "codex", "33333333")
+        self.assertIn("fresh        50", second.stdout)
 
     def test_z_codex_parent_removal_includes_child(self) -> None:
         self.run_cli("rm", "-H", "codex", "-y", "33333333")

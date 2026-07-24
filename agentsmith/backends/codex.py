@@ -441,6 +441,10 @@ class CodexBackend(Backend):
         return artifacts
 
     @override
+    def scan_exclude_dirs(self) -> set[str]:
+        return {"packages", "plugins", "skills", ".tmp", "cache"}
+
+    @override
     def remove(
         self, session_id: str, dry_run: bool = False, aggressive: bool = False
     ) -> PurgeReport:

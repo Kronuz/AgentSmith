@@ -71,6 +71,10 @@ A package, three layers:
    commands resolve an id/prefix/path across all selected backends
    (`resolve()`), so ids never need a harness qualifier.
 
+Usage summaries are cached per session under `~/.cache/asmith/usage/`, keyed by
+the native artifacts' paths, mtimes, and sizes. Both usage and Claude index caches
+use atomic replacement so concurrent `asmith` invocations cannot leave partial JSON.
+
 ### Adding a harness
 
 Implement every abstract method of `Backend`, then add it to `select_backends()`
@@ -124,8 +128,9 @@ if the id somehow survives pruning it's reported, never corrupted.
 `deep_purge` targets one **session id** in known bookkeeping spots. `scan.py` is the
 orthogonal tool: find/scrub an **arbitrary string** (a leaked secret) across *all*
 harness state, not just rendered transcripts. `asmith grep` only reads `transcript()`;
-`scan.run(homes, rx, mask, apply, reveal, max_bytes, emit)` walks **every file** under
-each home and **every SQLite DB** it finds, so it also covers logs, per-session
+`scan.run(homes, rx, mask, apply, reveal, max_bytes, emit)` walks every mutable-state
+file under each home (excluding Codex installation assets) and every SQLite DB it
+finds, so it also covers logs, per-session
 `session.db` files, the FTS5 index, JSON/YAML, tool args, and subagent transcripts.
 
 - **SQLite is detected by magic header** (`b"SQLite format 3\x00"`), not extension —

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .backends.base import Backend
 from .model import Session
+from .usage_cache import usage_for
 
 SCHEMA_VERSION = 1
 
@@ -78,7 +79,7 @@ def export_bundle(
             _write_json(session_root / "metadata.json", asdict(session))
             _write_json(
                 session_root / "usage.json",
-                [asdict(row) for row in backend.usage(session.id)],
+                [asdict(row) for row in usage_for(backend, session.id)],
             )
             _write_json(
                 session_root / "files.json",

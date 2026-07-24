@@ -22,6 +22,7 @@ from .backends import (
 )
 from .export import ExportItem, export_bundle
 from .model import CACHE_READ_WEIGHT, Msg, PurgeReport, SearchHit, Session
+from .usage_cache import usage_for
 from .util import (
     ago,
     bold,
@@ -299,7 +300,7 @@ def cmd_show(args: argparse.Namespace) -> None:
     field("updated", f"{fmt_local(s.updated_at)}  ({dim(ago(s.updated_at) + ' ago')})")
     field("turns", str(_turn_count(backends, s)))
     field("files", str(len(b.files(s.id))))
-    rows = b.usage(s.id)
+    rows = usage_for(b, s.id)
     itok = sum(r.input for r in rows)
     otok = sum(r.output for r in rows)
     ctok = sum(r.cache_read for r in rows)
@@ -533,6 +534,12 @@ def cmd_search(args: argparse.Namespace) -> None:
         print(dim("(no matches)"))
         return
     labels: dict[str, Session] = {s.id: s for s in all_sessions(backends)}
+    hits.sort(
+        key=lambda hit: parse_ts(
+            labels[hit.session_id].updated_at if hit.session_id in labels else None
+        ),
+        reverse=True,
+    )
     multi = len(backends) > 1
     cols = _term_cols()
     for h in hits[: args.number]:
@@ -560,7 +567,7 @@ def cmd_files(args: argparse.Namespace) -> None:
         tn = (f.tool or "").ljust(6)
         turn = f"t{f.turn}" if f.turn is not None else ""
         print(f"{dim(tn)}  {dim(turn)}  {f.path}")
-    print(dim(f"\n{len(touches)} files"))
+    print(dim(f"\n{len(touches)} observed file touch(es)"))
 
 
 def cmd_checkpoints(args: argparse.Namespace) -> None:
@@ -584,7 +591,7 @@ def cmd_usage(args: argparse.Namespace) -> None:
     backends = select_backends(args.harness)
     if args.session:
         b, s = resolve(backends, args.session)
-        rows = b.usage(s.id)
+        rows = usage_for(b, s.id)
         if not rows:
             print(dim("(no usage recorded)"))
             return
@@ -619,7 +626,7 @@ def cmd_usage(args: argparse.Namespace) -> None:
     scored: list[tuple[Session, float, float, float, str, int]] = []
     for s in all_sessions(backends):
         b = backend_for(backends, s.harness)
-        rows = b.usage(s.id)
+        rows = usage_for(b, s.id)
         if not rows:
             continue
         eff = sum(r.effective for r in rows)
@@ -835,7 +842,7 @@ def highlight(line: str, pattern: re.Pattern[str]) -> str:
 
 def cmd_redact(args: argparse.Namespace) -> None:
     backends = select_backends(args.harness)
-    homes = [(b.name, b.home) for b in backends]
+    homes = [(b.name, b.home, b.scan_exclude_dirs()) for b in backends]
     fixed = not args.regex
     rx = scan.compile_pattern(args.pattern, fixed=fixed, ignore_case=args.ignore_case)
     mask_bytes = (args.mask or "*").encode("utf-8")
@@ -847,7 +854,7 @@ def cmd_redact(args: argparse.Namespace) -> None:
     verbose = args.verbose
     quiet = args.quiet
 
-    homes_desc = " + ".join(str(h) for _n, h in homes)
+    homes_desc = " + ".join(str(home) for _name, home, _excluded in homes)
     kind = "literal" if fixed else "regex"
     case = "case-insensitive" if args.ignore_case else "case-sensitive"
 
@@ -968,7 +975,7 @@ def cmd_stats(args: argparse.Namespace) -> None:
         dirs = len({s.cwd for s in sessions if s.cwd})
         aiu = 0.0
         for s in sessions:
-            aiu += sum(r.aiu or 0 for r in b.usage(s.id)) if args.usage else 0
+            aiu += sum(r.aiu or 0 for r in usage_for(b, s.id)) if args.usage else 0
         span = ""
         if sessions:
             created = [parse_ts(s.created_at) for s in sessions]
@@ -1381,7 +1388,11 @@ def build_parser() -> argparse.ArgumentParser:
     add_number(sp, 20)
     sp.set_defaults(func=cmd_search)
 
-    sp = sub.add_parser("files", parents=[common], help="files touched in a session")
+    sp = sub.add_parser(
+        "files",
+        parents=[common],
+        help="file touches recorded or inferred from session tool calls",
+    )
     _mark(sp.add_argument("session", help="id / prefix / path / ."), "ids")
     sp.set_defaults(func=cmd_files)
 

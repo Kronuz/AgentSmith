@@ -34,7 +34,15 @@ _SKIP_EXTS = {
     ".shm",
 }
 # Never touched in either pass (deleting inside would be unsafe).
-_SKIP_ALWAYS = {".git", "node_modules"}
+_SKIP_ALWAYS = {
+    ".git",
+    ".tmp",
+    "cache",
+    "node_modules",
+    "packages",
+    "plugins",
+    "skills",
+}
 # Skipped only for the *content* scan (pass 2), for speed. Pass 1 still DELETES
 # id-named files/dirs inside these (they are exactly the vestiges to remove).
 _SKIP_SCAN = {"rewind-file-snapshots", "file-history"}

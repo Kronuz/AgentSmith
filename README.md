@@ -78,6 +78,9 @@ commands auto-detect which harness owns an id (UUIDs never collide).
   independent sessions; their transcript, usage, files, export, and deletion are
   aggregated with the parent.
 
+Parsed usage summaries are cached by native-artifact mtime/size under
+`~/.cache/asmith/usage/`, so repeated leaderboards do not reparse every transcript.
+
 ## The session name
 
 Each row shows the session's **name** and its **path** (cwd), on one line — path
@@ -116,10 +119,10 @@ the full id).
 | `asmith show <session>` | Metadata: cwd, repo/branch, times, turns, files, tokens/AIU, checkpoints, resume line. |
 | `asmith dump <session>` | Render a conversation. `-t` tools, `-R` reasoning, `--no-subagents`, `--md`, `--color`, `--raw`, `-o FILE`. |
 | `asmith export <id/path> -o DIR` | Create a portable, checksummed bundle. A path exports every exact-cwd session; `--recursive` includes nested cwd paths; `--include-memory` adds attributable project memory. |
-| `asmith search <query…>` | Search sessions (Copilot FTS5; Claude/Codex transcript scan). |
+| `asmith search <query…>` | Literal-phrase search across sessions (Copilot FTS5; Claude/Codex scan), merged by recency. |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
 | `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under all harness homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
-| `asmith files <session>` | Files touched in a session. |
+| `asmith files <session>` | File touches recorded or inferred from tool calls (not a workspace snapshot). |
 | `asmith checkpoints <session>` (`cp`) | Checkpoints (copilot only). `-v` for next steps. |
 | `asmith usage [session]` | Per-model fresh input/output/cache/reasoning + AIU, or a leaderboard ranked by estimated **wtc**. See `asmith usage --help`. |
 | `asmith recent [-n N]` | Most recent sessions across all directories. |
@@ -233,9 +236,11 @@ It uses the same shredding as `asmith rm`, skips the live session, and confirms 
 `asmith grep` searches only the rendered **conversation**. If a password, token, or key
 leaked into an agent's state, it can also land in logs, per-session `session.db`
 files, Copilot's FTS5 search index, JSON/YAML bookkeeping, tool arguments, and
-subagent transcripts. `asmith redact` is the leak hunter: it walks **every file** under
-all harness homes (any type, no size cap by default) **and every SQLite database** it finds
-there, so it catches all of it.
+subagent transcripts. `asmith redact` is the leak hunter: it walks mutable files
+under all harness homes (any type, no size cap by default) and every SQLite database
+it finds there. Codex installation assets (`packages`, plugins, skills and caches)
+are excluded: they are large immutable program data, not session state, and
+byte-redacting them could corrupt installed executables.
 
 ```sh
 asmith redact 'hunter2!' --dry-run       # find everywhere, totals only (read-only)

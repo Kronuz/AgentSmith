@@ -288,8 +288,9 @@ def scan_db(
 # --- walk + driver ---------------------------------------------------------
 
 
-def _walk(home: Path, max_bytes: int) -> Iterator[Path]:
-    for root, _dirs, files in os.walk(home, followlinks=False):
+def _walk(home: Path, max_bytes: int, exclude_dirs: set[str]) -> Iterator[Path]:
+    for root, dirs, files in os.walk(home, followlinks=False):
+        dirs[:] = [name for name in dirs if name not in exclude_dirs]
         for name in files:
             p = Path(root) / name
             try:
@@ -305,7 +306,7 @@ def _walk(home: Path, max_bytes: int) -> Iterator[Path]:
 
 
 def run(
-    homes: list[tuple[str, Path]],
+    homes: list[tuple[str, Path, set[str]]],
     rx: re.Pattern[bytes],
     mask: int,
     apply: bool,
@@ -324,10 +325,10 @@ def run(
     """
     res = ScanResult()
     seen: set[Path] = set()
-    for _name, home in homes:
+    for _name, home, exclude_dirs in homes:
         if not home.exists():
             continue
-        for p in _walk(home, max_bytes):
+        for p in _walk(home, max_bytes, exclude_dirs):
             if not apply and limit and res.total_matches >= limit:
                 res.stopped_early = True
                 return res

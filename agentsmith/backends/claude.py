@@ -5,6 +5,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, override
@@ -54,11 +55,19 @@ class ClaudeBackend(Backend):
             return {}
 
     def _save_cache(self, cache: dict[str, dict[str, Any]]) -> None:
+        temporary: str | None = None
         try:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            self._cache_file().write_text(json.dumps(cache))
+            destination = self._cache_file()
+            with tempfile.NamedTemporaryFile(
+                "w", dir=CACHE_DIR, prefix=f".{destination.name}.", delete=False
+            ) as stream:
+                temporary = stream.name
+                json.dump(cache, stream)
+            os.replace(temporary, destination)
         except OSError:
-            pass
+            if temporary is not None:
+                Path(temporary).unlink(missing_ok=True)
 
     def _scan_file(self, path: Path) -> dict[str, Any]:
         cwd: str | None = None

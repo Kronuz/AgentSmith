@@ -245,6 +245,8 @@ class CopilotBackend(Backend):
 
     @override
     def search(self, query: str, limit: int) -> list[SearchHit]:
+        # Match the literal phrase semantics used by transcript-scan backends.
+        fts_query = '"' + query.replace('"', '""') + '"'
         try:
             rows = (
                 self.con()
@@ -252,7 +254,7 @@ class CopilotBackend(Backend):
                     "SELECT session_id, source_type, "
                     "snippet(search_index, 0, '[', ']', '…', 10) AS snip "
                     "FROM search_index WHERE search_index MATCH ? LIMIT ?",
-                    (query, limit),
+                    (fts_query, limit),
                 )
                 .fetchall()
             )
