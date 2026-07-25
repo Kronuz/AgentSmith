@@ -2,7 +2,8 @@
 # Install or uninstall the non-interactive AgentSmith executable.
 set -eu
 
-root=$(CDPATH='' cd -- "$(dirname "$0")" && pwd -P)
+# Keep a symlinked installation directory as the public executable target.
+root=$(CDPATH='' cd -- "$(dirname "$0")" && pwd -L)
 bin_dir=$HOME/.local/bin
 bin_dir_set=
 action=install
