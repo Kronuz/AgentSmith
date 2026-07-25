@@ -36,8 +36,20 @@ Install the executable into `~/.local/bin` (which should be on `PATH`), then sou
 the shell integrations from `~/.profile` (or `~/.zshrc` / `~/.bashrc`):
 
 ```sh
-~/code/AgentSmith/install.sh
-[ -r "$HOME/code/AgentSmith/agentsmith.sh" ] && . "$HOME/code/AgentSmith/agentsmith.sh"
+git clone https://github.com/Kronuz/AgentSmith.git ~/.local/share/AgentSmith
+~/.local/share/AgentSmith/install.sh
+[ -r "$HOME/.local/share/AgentSmith/agentsmith.sh" ] \
+  && . "$HOME/.local/share/AgentSmith/agentsmith.sh"
+```
+
+The installer uses the conventional `install`, `--dry-run`, `--force`,
+`--uninstall`, and `--help` interface. `--force` replaces a conflicting symlink
+after showing its target, but never overwrites a regular file:
+
+```sh
+~/.local/share/AgentSmith/install.sh --dry-run
+~/.local/share/AgentSmith/install.sh --force
+~/.local/share/AgentSmith/install.sh --uninstall
 ```
 
 The executable matters for non-interactive shells: agent tool calls do not source

@@ -38,7 +38,7 @@ because it needed a working agent (`copilot -p`) that isn't reliably available.
 | `agentsmith/backends/claude.py` | `ClaudeBackend` + claude store paths. |
 | `agentsmith/backends/codex.py` | `CodexBackend` + Codex store paths. |
 | `agentsmith/backends/__init__.py` | `select_backends`, `resolve`, `all_sessions`, `backend_for`. |
-| `bin/asmith` / `install.sh` | Real non-interactive executable / conservative `~/.local/bin` symlink installer. |
+| `bin/asmith` / `install.sh` | Real non-interactive executable / conservative `~/.local/bin` symlink installer. Its `--force` replaces only symlinks, never regular files; `--uninstall` removes only its own exact link. |
 | `agentsmith.sh` | Sourceable shell-only `ascd`, agent auto-resume wrappers, and completions; never defines `asmith`. |
 | `README.md` / `AGENTS.md` / `TUTORIAL.md` | User docs / agent-facing docs / hands-on walkthrough. |
 | `pyrefly.toml` | Strict type-check config (`project-includes = ["agentsmith"]`). |
