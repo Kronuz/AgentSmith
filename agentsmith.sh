@@ -38,6 +38,15 @@ claude() {
 }
 
 codex() {
+  # Codex rejects iTerm prerelease versions such as 3.7.0beta7 when gating
+  # terminal pets. Normalize the version for Codex without changing the shell.
+  case "${TERM_PROGRAM:-}:${TERM_PROGRAM_VERSION:-}" in
+    iTerm.app:*[!0-9.]*)
+      local TERM_PROGRAM_VERSION="${TERM_PROGRAM_VERSION%%[!0-9.]*}"
+      export TERM_PROGRAM_VERSION
+      ;;
+  esac
+
   if [ $# -eq 0 ]; then
     local id
     id="$(asmith resolve --resumable --exact -H codex . 2>/dev/null)"
