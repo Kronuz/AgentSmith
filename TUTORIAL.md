@@ -75,11 +75,11 @@ grouped by directory instead of a flat list? Use `asmith tree`:
 
 ```console
 $ asmith tree                      # path → its sessions, one-liner each
-/Users/gmendezb/code/KronuzBlog
-  * co ee22a500    4h    15 turns  Set Up KronuzBlog
+/Users/gmendezb/code/ProjectX
+  * co ee22a500    4h    15 turns  Set Up ProjectX
   * cl 10b72094   21d   219 turns  Enhance public blog projects pages
-/Users/gmendezb/code/Copilot
-  * co 413fc324    1h    15 turns  Build Copilot Session Toolset
+/Users/gmendezb/code/ProjectY
+  * co 413fc324    1h    15 turns  Build ProjectY Session Toolset
   ...
 $ asmith tree --by agent           # group by agent first, then directory
 $ asmith tree -H claude            # just one agent
@@ -508,7 +508,7 @@ lines," optionally scoped to one session.
 $ asmith show 10b72094
 10b72094  (10b72094-…)  [claude]
   summary     Enhance public blog projects pages
-  cwd         /Users/gmendezb/Development/KronuzBlog
+  cwd         /Users/gmendezb/code/ProjectX
   branch      main
   turns       219
   files       260
@@ -590,7 +590,7 @@ owns the id automatically — you never qualify it.
 ## 9. Power tips
 
 - **Pipe it.** Color auto-disables when output isn't a terminal, so
-  `asmith dump . | less`, `asmith ls | grep KronuzBlog`, and `asmith resolve . | pbcopy`
+  `asmith dump . | less`, `asmith ls | grep ProjectX`, and `asmith resolve . | pbcopy`
   all Just Work. Force plain text anytime with `NO_COLOR=1`.
 - **Jump into a session's files.** `ascd <id>` drops you into its on-disk state
   dir; `asmith path <id>` just prints it.
