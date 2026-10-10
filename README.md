@@ -146,6 +146,7 @@ the full id).
 | `asmith rollback RECEIPT` | Restore the exact baseline and remove newly created tracked paths. `--dry-run`, `-y`. |
 | `asmith search <query…>` | Literal-phrase search across sessions (Copilot FTS5; Claude/Codex scan), merged by recency. |
 | `asmith grep <regex> [session]` | Regex over full **transcripts** (rendered conversation only). `-m/--max-count` (default: all). |
+| `asmith prompts [regex]` | The **prompts you gave**, per turn, optionally filtered; `-r` adds each turn's final reply. `-i TARGET` (session or directory), `--oneline`, `--json`, `--reply-lines`, `-m`. |
 | `asmith redact <secret>` | Find/scrub a string **everywhere** — every file *and* database under all harness homes. `--dry-run` (find only), `-v`/`-q`, `-m/--max-count`, `--regex`, `-i`, `--mask`, `-y`, `--show-secret`, `--max-bytes`. |
 | `asmith files <session>` | File touches recorded or inferred from tool calls, including distinguishable subagents by default (not a workspace snapshot). `--main-only` excludes them. |
 | `asmith checkpoints <session>` | Checkpoints (copilot only). `-v` for next steps. |
@@ -230,6 +231,18 @@ repository, timestamps, turns, usage, files, checkpoints, and the native resume 
 
 - `-s/--case-sensitive`: disable the default case-insensitive matching.
 - `-m/--max-count N`: stop after N transcript matches; `0` means all.
+
+`asmith prompts [REGEX]`
+
+- `-i/--in TARGET`: one session (id or prefix), or a directory (`.` for here) to cover
+  all of its sessions; default is every session.
+- `-r/--replies`: show each turn's final reply (the turn's last assistant text).
+- `--reply-lines N`: truncate replies to N lines; default 12, `0` for the full reply.
+- `--oneline`, `--json`: compact or machine-readable output.
+- `-s/--case-sensitive`, `-m/--max-count N`: as for `grep`.
+
+Injected context (Codex's `AGENTS.md` and `<environment_context>` blocks, Claude's
+reminders) is not a prompt and is skipped.
 
 `asmith files SESSION`
 

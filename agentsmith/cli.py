@@ -1273,6 +1273,113 @@ def cmd_grep(args: argparse.Namespace) -> None:
     print(dim(f"\n{hits} hits"))
 
 
+def _prompt_targets(
+    backends: list[Backend], target: str | None
+) -> list[tuple[Backend, Session]]:
+    """Every session, a directory's sessions (a path), or one session (an id)."""
+    if not target:
+        return [(backend_for(backends, s.harness), s) for s in all_sessions(backends)]
+    if looks_like_path(target):
+        pairs = [(b, s) for b in backends for s in b.sessions_for_dir(target)]
+        if not pairs:
+            die(f"no sessions for {target}")
+        pairs.sort(key=lambda pair: parse_ts(pair[1].updated_at), reverse=True)
+        return pairs
+    return [resolve(backends, target)]
+
+
+def _turns(msgs: list[Msg]) -> list[tuple[str, str]]:
+    """(prompt, reply) per user turn; the reply is the turn's last assistant text."""
+    turns: list[tuple[str, str]] = []
+    prompt: str | None = None
+    reply = ""
+    for m in msgs:
+        if m.role == "user":
+            if prompt is not None:
+                turns.append((prompt, reply))
+            prompt, reply = m.text, ""
+        elif prompt is not None and m.text.strip():
+            reply = m.text
+    if prompt is not None:
+        turns.append((prompt, reply))
+    return turns
+
+
+def _indent(text: str, prefix: str) -> str:
+    return "\n".join(prefix + line for line in text.splitlines())
+
+
+def cmd_prompts(args: argparse.Namespace) -> None:
+    backends = select_backends(args.harness)
+    pattern = (
+        re.compile(args.pattern, 0 if args.case_sensitive else re.IGNORECASE)
+        if args.pattern
+        else None
+    )
+    limit = max(0, args.max_count)  # 0 = unlimited
+    records: list[dict[str, Any]] = []
+    shown = 0
+    for b, s in _prompt_targets(backends, args.target):
+        header = False
+        for number, (prompt, reply) in enumerate(
+            _turns(b.transcript(s.id, subagents=False)), 1
+        ):
+            if pattern and not (
+                pattern.search(prompt) or (args.replies and pattern.search(reply))
+            ):
+                continue
+            shown += 1
+            if args.json:
+                record: dict[str, Any] = {
+                    "harness": s.harness,
+                    "session": s.id,
+                    "cwd": s.cwd,
+                    "turn": number,
+                    "prompt": prompt,
+                }
+                if args.replies:
+                    record["reply"] = reply
+                records.append(record)
+            else:
+                if not header:
+                    print(
+                        f"{harness_badge(s.harness)} {bold(short(s.id))}  "
+                        f"{dim(ago(s.updated_at))}  {path(s.cwd or '')}  {s.name or ''}"
+                    )
+                    header = True
+                shown_prompt = " ".join(prompt.split()) if args.oneline else prompt
+                if args.oneline:
+                    shown_prompt = trunc(shown_prompt, 160)
+                if pattern:
+                    shown_prompt = highlight(shown_prompt, pattern)
+                print(
+                    f"  {green('#' + str(number))}  "
+                    + _indent(shown_prompt, "      ").lstrip()
+                )
+                if args.replies and reply:
+                    text = (
+                        trunc_lines(reply, args.reply_lines)
+                        if args.reply_lines
+                        else reply
+                    )
+                    print(
+                        dim(_indent(text, "      ")).replace(
+                            "      ", "    " + cyan("↳") + " ", 1
+                        )
+                    )
+                if not args.oneline:
+                    print()
+            if limit and shown >= limit:
+                break
+        if limit and shown >= limit:
+            break
+    if args.json:
+        print(json.dumps(records, indent=2, ensure_ascii=False))
+        return
+    note = f"; stopped at {limit}, raise with -m" if limit and shown >= limit else ""
+    print(dim(f"{shown} prompt(s){note}"))
+
+
 def highlight(line: str, pattern: re.Pattern[str]) -> str:
     if not color_enabled():
         return line
@@ -2212,6 +2319,50 @@ def build_parser() -> argparse.ArgumentParser:
         help="stop after NUM matches (default 0 = all, like grep -m)",
     )
     sp.set_defaults(func=cmd_grep)
+
+    sp = sub.add_parser(
+        "prompts",
+        parents=[common],
+        help="the prompts you gave (and the replies), across sessions",
+        description=(
+            "List user prompts, oldest first within each session, newest session "
+            "first. PATTERN filters them (regex); --replies adds each turn's final "
+            "answer. Injected context (AGENTS.md, environment) is not a prompt."
+        ),
+    )
+    sp.add_argument("pattern", nargs="?", help="regex filter (default: every prompt)")
+    _mark(
+        sp.add_argument(
+            "-i",
+            "--in",
+            dest="target",
+            metavar="TARGET",
+            help="a session id/prefix, or a directory (. = here) for all its sessions",
+        ),
+        "both",
+    )
+    sp.add_argument(
+        "-r", "--replies", action="store_true", help="show each turn's final reply"
+    )
+    sp.add_argument(
+        "--reply-lines",
+        type=int,
+        default=12,
+        metavar="N",
+        help="truncate replies to N lines (default 12; 0 = full)",
+    )
+    sp.add_argument("--oneline", action="store_true", help="one line per prompt")
+    sp.add_argument("--json", action="store_true", help="machine-readable output")
+    sp.add_argument("-s", "--case-sensitive", action="store_true")
+    sp.add_argument(
+        "-m",
+        "--max-count",
+        type=int,
+        default=0,
+        metavar="NUM",
+        help="stop after NUM prompts (default 0 = all)",
+    )
+    sp.set_defaults(func=cmd_prompts)
 
     sp = sub.add_parser(
         "redact",

@@ -321,6 +321,15 @@ class BackendFixturesTest(unittest.TestCase):
                         "payload": {"type": "user_message", "message": prompt},
                     },
                     {
+                        # Older Codex also wrote each prompt as a user item.
+                        "type": "response_item",
+                        "payload": {
+                            "type": "message",
+                            "role": "user",
+                            "content": [{"type": "input_text", "text": prompt}],
+                        },
+                    },
+                    {
                         "type": "turn_context",
                         "payload": {"model": "gpt-fixture"},
                     },
@@ -381,6 +390,94 @@ class BackendFixturesTest(unittest.TestCase):
         self.assertIn("codex", result.stdout)
         self.assertIn("33333333", result.stdout)
         self.assertNotIn("44444444", result.stdout)
+
+    def _codex_modern(self) -> None:
+        """A session in the current Codex format: prompts only as user items."""
+        home = Path(self.env["CODEX_HOME"])
+        modern = "55555555-5555-5555-5555-555555555555"
+        modern_path = home / "sessions" / f"rollout-{modern}.jsonl"
+
+        def user(*parts: dict[str, str]) -> dict[str, object]:
+            return {
+                "type": "response_item",
+                "payload": {"type": "message", "role": "user", "content": list(parts)},
+            }
+
+        def said(text: str) -> dict[str, object]:
+            return {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": text}],
+                },
+            }
+
+        _jsonl(
+            modern_path,
+            [
+                {
+                    "type": "session_meta",
+                    "payload": {"id": modern, "cwd": str(self.cwd)},
+                },
+                user(
+                    {
+                        "type": "input_text",
+                        "text": "# AGENTS.md instructions\n<INSTRUCTIONS>x",
+                    },
+                    {
+                        "type": "input_text",
+                        "text": "<environment_context>\n</environment_context>",
+                    },
+                ),
+                user(
+                    {"type": "input_text", "text": "How many voters do we need?"},
+                    {"type": "input_text", "text": '<image name="[Image #1]">'},
+                    {"type": "input_image", "image_url": "data:image/png;base64,AA=="},
+                    {"type": "input_text", "text": "</image>"},
+                ),
+                said("Checking the consensus limits."),
+                said("Three or five voters."),
+                user({"type": "input_text", "text": "And the agents?"}),
+                said("They never vote."),
+            ],
+        )
+        con = sqlite3.connect(self.env["CODEX_DB"])
+        con.execute(
+            "INSERT INTO threads VALUES (?, ?, 1, 2, ?, ?, 0)",
+            (modern, str(modern_path), str(self.cwd), "codex modern"),
+        )
+        con.commit()
+        con.close()
+
+    def test_codex_prompts_read_current_format_without_injected_context(self) -> None:
+        self._codex_modern()
+        result = self.run_cli(
+            "prompts", "-H", "codex", "-i", "55555555", "--json", "-r"
+        )
+        prompts = json.loads(result.stdout)
+        self.assertEqual(
+            [(p["turn"], p["prompt"], p["reply"]) for p in prompts],
+            [
+                (1, "How many voters do we need?\n[image]", "Three or five voters."),
+                (2, "And the agents?", "They never vote."),
+            ],
+        )
+        shown = self.run_cli("show", "-H", "codex", "55555555")
+        self.assertRegex(shown.stdout, r"turns\s+2")
+
+    def test_codex_prompts_count_legacy_sessions_once(self) -> None:
+        result = self.run_cli("prompts", "-H", "codex", "-i", "33333333", "--json")
+        self.assertEqual(
+            [p["prompt"] for p in json.loads(result.stdout)], ["hello there"]
+        )
+
+    def test_prompts_filter_by_pattern_across_sessions(self) -> None:
+        self._codex_modern()
+        result = self.run_cli("prompts", "voters?", "--oneline")
+        self.assertIn("How many voters do we need?", result.stdout)
+        self.assertNotIn("And the agents?", result.stdout)
+        self.assertIn("1 prompt(s)", result.stdout)
 
     def test_codex_usage_aggregates_child_and_normalizes_cache(self) -> None:
         result = self.run_cli("usage", "-H", "codex", "33333333")

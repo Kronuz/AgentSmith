@@ -74,6 +74,31 @@ def _content_text(content: Any) -> str:
     )
 
 
+# Context Codex injects as user-role input, not text the user typed.
+_INJECTED_PREFIXES = ("# AGENTS.md instructions", "<environment_context>")
+_IMAGE_TAG = re.compile(r"</?image\b[^>]*>")
+
+
+def _user_prompt_text(content: Any) -> str:
+    """The typed text of a user `response_item` message, minus injected context."""
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "input_image":
+            parts.append("[image]")
+            continue
+        if block.get("type") != "input_text":
+            continue
+        text = str(block.get("text", ""))
+        if text.startswith(_INJECTED_PREFIXES) or _IMAGE_TAG.fullmatch(text.strip()):
+            continue
+        parts.append(text)
+    return clean_user("\n".join(parts))
+
+
 class CodexBackend(Backend):
     name = "codex"
     home = CODEX_HOME
@@ -224,12 +249,17 @@ class CodexBackend(Backend):
     def transcript(self, session_id: str, subagents: bool = True) -> list[Msg]:
         results: dict[str, dict[str, Any]] = {}
         messages: list[Msg] = []
+        # Codex before ~0.160 recorded each prompt as an `event_msg`/`user_message`
+        # AND a user `response_item`; newer versions write only the latter.
+        legacy_prompts = 0
+        item_prompts: set[int] = set()
         for event in self._events(session_id):
             payload = event.get("payload", {})
             if (
                 event.get("type") == "event_msg"
                 and payload.get("type") == "user_message"
             ):
+                legacy_prompts += 1
                 text = clean_user(str(payload.get("message", "")))
                 if text:
                     messages.append(Msg("user", text))
@@ -243,6 +273,12 @@ class CodexBackend(Backend):
                     "success": True,
                     "content": payload.get("output", ""),
                 }
+            elif kind == "message" and payload.get("role") == "user":
+                text = _user_prompt_text(payload.get("content"))
+                if text:
+                    message = Msg("user", text)
+                    item_prompts.add(id(message))
+                    messages.append(message)
             elif kind == "message" and payload.get("role") == "assistant":
                 text = _content_text(payload.get("content"))
                 if text:
@@ -274,6 +310,8 @@ class CodexBackend(Backend):
                         "id": str(payload.get("call_id", "")),
                     }
                 )
+        if legacy_prompts:
+            messages = [m for m in messages if id(m) not in item_prompts]
         for message in messages:
             for tool in message.tools:
                 tool["result"] = results.get(tool.pop("id", ""))
@@ -290,12 +328,22 @@ class CodexBackend(Backend):
 
     @override
     def turn_count(self, session_id: str) -> int:
-        return sum(
-            1
-            for event in self._events(session_id)
-            if event.get("type") == "event_msg"
-            and event.get("payload", {}).get("type") == "user_message"
-        )
+        legacy = items = 0
+        for event in self._events(session_id):
+            payload = event.get("payload", {})
+            if (
+                event.get("type") == "event_msg"
+                and payload.get("type") == "user_message"
+            ):
+                legacy += 1
+            elif (
+                event.get("type") == "response_item"
+                and payload.get("type") == "message"
+                and payload.get("role") == "user"
+                and _user_prompt_text(payload.get("content"))
+            ):
+                items += 1
+        return legacy or items
 
     @override
     def files(self, session_id: str, subagents: bool = True) -> list[FileTouch]:

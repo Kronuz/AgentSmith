@@ -500,6 +500,15 @@ $ asmith grep "TODO|FIXME"             # regex across every resumable transcript
 `search` is for "which session talked about X?"; `grep` is for "show me the exact
 lines," optionally scoped to one session.
 
+To recover what you actually asked for, read the prompts instead of the whole
+transcript:
+
+```console
+$ asmith prompts -i . --oneline              # every prompt given in this directory
+$ asmith prompts 'scale|thousands' -r        # matching prompts, with each final reply
+$ asmith prompts -i 01a0f5d7 --json          # one session, for scripts
+```
+
 ---
 
 ## 6. Understanding a session
@@ -626,6 +635,7 @@ owns the id automatically — you never qualify it.
 | Undo installed changes | `asmith rollback RECEIPT --dry-run` then `asmith rollback RECEIPT -y` |
 | Find which session discussed X | `asmith search <words>` |
 | Grep transcripts | `asmith grep <regex> [id]` |
+| What did I ask? | `asmith prompts [regex] [-i id/dir] [-r]` |
 | Inspect a session | `asmith show <id>` · `asmith files <id>` · `asmith usage <id>` |
 | Delete completely | `asmith rm <id> --dry-run` then `asmith rm <id> -y` |
 | Overview | `asmith stats` · `asmith dirs` |
