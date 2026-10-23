@@ -16,68 +16,86 @@ ascd() {
 # Agent wrappers — a bare command resumes the newest resumable session for the
 # current directory, otherwise starts fresh; any arguments pass straight through to
 # the real CLI. copilot() replaces the inline function that used to live in
-# ~/.profile; all resolve via the toolset's exact-cwd index.
-copilot() {
-  if [ $# -eq 0 ]; then
-    local id
-    id="$(asmith resolve --resumable --exact -H copilot . 2>/dev/null)"
-    command copilot ${id:+--resume="$id"} --yolo
+# ~/.profile; all resolve via the toolset's exact-cwd index. Each wrapper is defined
+# only when its CLI is installed, so a missing agent stays "command not found".
+_asmith_has_cli() {
+  # True when $1 is an executable on PATH, ignoring functions and aliases.
+  if [ -n "${ZSH_VERSION:-}" ]; then
+    whence -p "$1" >/dev/null 2>&1
+  elif [ -n "${BASH_VERSION:-}" ]; then
+    [ -n "$(type -P "$1" 2>/dev/null)" ]
   else
-    command copilot "$@"
+    command -v "$1" >/dev/null 2>&1
   fi
 }
 
-_asmith_claude_exec() {
-  # Chain through cmux's hook-injecting wrapper when its shell integration is loaded.
-  if typeset -f _cmux_claude_wrapper_command >/dev/null 2>&1; then
-    _cmux_claude_wrapper_command "$@"
-  else
-    command claude "$@"
-  fi
-}
-
-_asmith_claude() {
-  if [ $# -eq 0 ]; then
-    local id
-    id="$(asmith resolve --resumable --exact -H claude . 2>/dev/null)"
-    _asmith_claude_exec ${id:+"--resume=$id"}
-  else
-    _asmith_claude_exec "$@"
-  fi
-}
-
-claude() { _asmith_claude "$@"; }
-
-# cmux reinstalls its own claude() at the first prompt; reclaim it afterwards.
-if [ -n "${ZSH_VERSION:-}" ]; then
-  _asmith_reclaim_claude() {
-    [[ ${functions[claude]-} == *_asmith_claude* ]] || claude() { _asmith_claude "$@"; }
+if _asmith_has_cli copilot; then
+  copilot() {
+    if [ $# -eq 0 ]; then
+      local id
+      id="$(asmith resolve --resumable --exact -H copilot . 2>/dev/null)"
+      command copilot ${id:+--resume="$id"} --yolo
+    else
+      command copilot "$@"
+    fi
   }
-  autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook precmd _asmith_reclaim_claude
 fi
 
-codex() {
-  # Codex rejects iTerm prerelease versions such as 3.7.0beta7 when gating
-  # terminal pets. Normalize the version for Codex without changing the shell.
-  case "${TERM_PROGRAM:-}:${TERM_PROGRAM_VERSION:-}" in
-    iTerm.app:*[!0-9.]*)
-      local TERM_PROGRAM_VERSION="${TERM_PROGRAM_VERSION%%[!0-9.]*}"
-      export TERM_PROGRAM_VERSION
-      ;;
-  esac
-
-  if [ $# -eq 0 ]; then
-    local id
-    id="$(asmith resolve --resumable --exact -H codex . 2>/dev/null)"
-    if [ -n "$id" ]; then
-      command codex resume "$id" --dangerously-bypass-approvals-and-sandbox
+if _asmith_has_cli claude; then
+  _asmith_claude_exec() {
+    # Chain through cmux's hook-injecting wrapper when its shell integration is loaded.
+    if typeset -f _cmux_claude_wrapper_command >/dev/null 2>&1; then
+      _cmux_claude_wrapper_command "$@"
     else
-      command codex --dangerously-bypass-approvals-and-sandbox
+      command claude "$@"
     fi
-  else
-    command codex "$@"
+  }
+
+  _asmith_claude() {
+    if [ $# -eq 0 ]; then
+      local id
+      id="$(asmith resolve --resumable --exact -H claude . 2>/dev/null)"
+      _asmith_claude_exec ${id:+"--resume=$id"}
+    else
+      _asmith_claude_exec "$@"
+    fi
+  }
+
+  claude() { _asmith_claude "$@"; }
+
+  # cmux reinstalls its own claude() at the first prompt; reclaim it afterwards.
+  if [ -n "${ZSH_VERSION:-}" ]; then
+    _asmith_reclaim_claude() {
+      [[ ${functions[claude]-} == *_asmith_claude* ]] || claude() { _asmith_claude "$@"; }
+    }
+    autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook precmd _asmith_reclaim_claude
   fi
-}
+fi
+
+if _asmith_has_cli codex; then
+  codex() {
+    # Codex rejects iTerm prerelease versions such as 3.7.0beta7 when gating
+    # terminal pets. Normalize the version for Codex without changing the shell.
+    case "${TERM_PROGRAM:-}:${TERM_PROGRAM_VERSION:-}" in
+      iTerm.app:*[!0-9.]*)
+        local TERM_PROGRAM_VERSION="${TERM_PROGRAM_VERSION%%[!0-9.]*}"
+        export TERM_PROGRAM_VERSION
+        ;;
+    esac
+
+    if [ $# -eq 0 ]; then
+      local id
+      id="$(asmith resolve --resumable --exact -H codex . 2>/dev/null)"
+      if [ -n "$id" ]; then
+        command codex resume "$id" --dangerously-bypass-approvals-and-sandbox
+      else
+        command codex --dangerously-bypass-approvals-and-sandbox
+      fi
+    else
+      command codex "$@"
+    fi
+  }
+fi
 
 # Tab-completion for `asmith` (bash + zsh). The candidates are computed by the CLI
 # itself (`asmith __complete`, which introspects the argparse parser), so this hook is

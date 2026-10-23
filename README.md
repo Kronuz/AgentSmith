@@ -28,7 +28,8 @@ Two parts:
     `python -m agentsmith ...`.
 - **`bin/asmith`** — a real executable for scripts and non-interactive agent shells.
 - **`agentsmith.sh`** — sourceable bash/zsh integrations: shell-only `ascd`, the
-  `copilot()` / `claude()` / `codex()` auto-resume wrappers, and completions.
+  `copilot()` / `claude()` / `codex()` auto-resume wrappers (each defined only when
+  that CLI is installed), and completions.
 
 ## Install
 
