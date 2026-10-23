@@ -27,15 +27,34 @@ copilot() {
   fi
 }
 
-claude() {
-  if [ $# -eq 0 ]; then
-    local id
-    id="$(asmith resolve --resumable --exact -H claude . 2>/dev/null)"
-    command claude ${id:+--resume "$id"}
+_asmith_claude_exec() {
+  # Chain through cmux's hook-injecting wrapper when its shell integration is loaded.
+  if typeset -f _cmux_claude_wrapper_command >/dev/null 2>&1; then
+    _cmux_claude_wrapper_command "$@"
   else
     command claude "$@"
   fi
 }
+
+_asmith_claude() {
+  if [ $# -eq 0 ]; then
+    local id
+    id="$(asmith resolve --resumable --exact -H claude . 2>/dev/null)"
+    _asmith_claude_exec ${id:+"--resume=$id"}
+  else
+    _asmith_claude_exec "$@"
+  fi
+}
+
+claude() { _asmith_claude "$@"; }
+
+# cmux reinstalls its own claude() at the first prompt; reclaim it afterwards.
+if [ -n "${ZSH_VERSION:-}" ]; then
+  _asmith_reclaim_claude() {
+    [[ ${functions[claude]-} == *_asmith_claude* ]] || claude() { _asmith_claude "$@"; }
+  }
+  autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook precmd _asmith_reclaim_claude
+fi
 
 codex() {
   # Codex rejects iTerm prerelease versions such as 3.7.0beta7 when gating
